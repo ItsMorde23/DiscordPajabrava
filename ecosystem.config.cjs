@@ -35,16 +35,16 @@ module.exports = {
     },
 
     // =====================================================
-    //  FRONTEND — Build estatico servido con "serve"
-    //  Requiere: npm install -g serve
-    //            cd frontend && npm run build
+    //  FRONTEND — Build estático servido con "serve" local
+    //  serve está en frontend/node_modules/.bin/serve
+    //  (instalado como dependencia local del frontend)
     // =====================================================
     {
       name: 'pajabrava-frontend',
-      script: 'serve',              // Requiere: npm install -g serve
-      args: '-s dist -l 5173',      // Sirve la carpeta dist en el puerto 5173
-      cwd: './frontend',            // Directorio del frontend
-      interpreter: 'none',          // "serve" es un binario, no un script JS
+      script: 'node_modules/.bin/serve',   // binario local, siempre funciona
+      args: '-s dist -l 5173',
+      cwd: './frontend',
+      interpreter: 'none',
       watch: false,
       autorestart: true,
       max_restarts: 10,
@@ -52,8 +52,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
       },
-      error_file: './logs/frontend-error.log',
-      out_file: './logs/frontend-out.log',
+      error_file: '../logs/frontend-error.log',
+      out_file: '../logs/frontend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     }
   ]
