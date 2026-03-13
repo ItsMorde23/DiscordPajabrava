@@ -86,6 +86,34 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
   }
 });
 
+// Editar nombre de canal
+router.put('/:channelId', verifyToken, async (req, res) => {
+  try {
+    const channelId = parseInt(req.params.channelId);
+    if (isNaN(channelId)) return res.status(400).json({ error: 'ID inválido' });
+
+    const { name } = req.body;
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'El nombre es requerido' });
+    }
+
+    const updatedChannel = await prisma.channel.update({
+      where: { id: channelId },
+      data: { name: name.trim() }
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('channel_updated', updatedChannel);
+    }
+
+    res.json(updatedChannel);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // Borrar un canal
 router.delete('/:channelId', verifyToken, async (req, res) => {
   try {

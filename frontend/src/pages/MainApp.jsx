@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import VoicePanel from '../components/VoicePanel';
 
 export default function MainApp() {
-  const { user, token, logout } = useContext(AuthContext);
+  const { user, token, logout, setUser, setToken } = useContext(AuthContext);
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [channels, setChannels] = useState([]);
@@ -22,6 +22,15 @@ export default function MainApp() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showMobileMembers, setShowMobileMembers] = useState(false);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [showEditChannel, setShowEditChannel] = useState(false);
+  const [editChannelId, setEditChannelId] = useState(null);
+  const [editChannelName, setEditChannelName] = useState('');
+  const [showChangeName, setShowChangeName] = useState(false);
+  const [newNameInput, setNewNameInput] = useState('');
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const inputRef = useRef(null);
 
   const chatEndRef = useRef(null);
   const notifTimerRef = useRef(null);
@@ -65,6 +74,12 @@ export default function MainApp() {
         if (prev.find(c => c.id === newChannel.id)) return prev;
         return [...prev, newChannel];
       });
+    });
+
+    // Evento de canal editado
+    newSocket.on('channel_updated', (updatedChannel) => {
+      setChannels(prev => prev.map(c => c.id === updatedChannel.id ? updatedChannel : c));
+      setCurrentChannel(prev => prev?.id === updatedChannel.id ? { ...prev, name: updatedChannel.name } : prev);
     });
 
     // Evento de canal borrado
@@ -199,6 +214,12 @@ export default function MainApp() {
 
   const deleteChannel = async (e, channelId) => {
     e.stopPropagation();
+    const ch = channels.find(c => c.id === channelId);
+    if (ch?.type === 'voice' && voiceChannelUsers[channelId] && voiceChannelUsers[channelId].length > 0) {
+      alert('No puedes borrar un canal de voz mientras hay usuarios conectados.');
+      return;
+    }
+
     if (!window.confirm('¿Estás seguro de que querés borrar este canal? Se borrarán todos sus mensajes.')) return;
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/channels/${channelId}`, {
@@ -214,12 +235,58 @@ export default function MainApp() {
     }
   };
 
+  const editChannelSubmit = async (e) => {
+    e.preventDefault();
+    if (!editChannelName.trim()) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/channels/${editChannelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editChannelName })
+      });
+      if (res.ok) {
+        setShowEditChannel(false);
+      } else {
+        const error = await res.json();
+        alert(error.error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const submitChangeName = async (e) => {
+    e.preventDefault();
+    if (!newNameInput.trim()) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/username`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ newUsername: newNameInput })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
+        setUser(data.user);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setShowChangeName(false);
+        setNewNameInput('');
+      } else {
+        const error = await res.json();
+        alert(error.error);
+      }
+    } catch(err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const sendMessage = (e) => {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (!messageInput.trim() || !currentChannel || !socket) return;
 
     socket.emit('send_message', {
@@ -299,6 +366,55 @@ export default function MainApp() {
               </div>
             )}
 
+            {/* Modal Cambiar Nombre */}
+            {showChangeName && (
+              <div className="absolute inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={e => { if(e.target === e.currentTarget) setShowChangeName(false); }}>
+                <div className="bg-[#2b2d31] p-6 rounded-xl shadow-2xl w-80">
+                  <h2 className="text-lg font-bold text-white mb-1">Cambiar nombre</h2>
+                  <p className="text-xs text-[#80848e] mb-4">El cambio será visible para todos en el servidor.</p>
+                  <form onSubmit={submitChangeName}>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="w-full bg-[#1e1f22] p-2.5 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#5865f2] mb-4 text-sm"
+                      value={newNameInput}
+                      onChange={e => setNewNameInput(e.target.value)}
+                      placeholder="Tu nuevo nombre"
+                      maxLength={32}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setShowChangeName(false)} className="text-[#b5bac1] hover:text-white px-4 py-2 text-sm transition">Cancelar</button>
+                      <button type="submit" className="bg-[#5865f2] hover:bg-[#4752c4] text-white font-semibold py-2 px-5 rounded-lg transition text-sm">Guardar</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Editar Canal */}
+            {showEditChannel && (
+              <div className="absolute inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={e => { if(e.target === e.currentTarget) setShowEditChannel(false); }}>
+                <div className="bg-[#2b2d31] p-6 rounded-xl shadow-2xl w-80">
+                  <h2 className="text-lg font-bold text-white mb-4">Editar canal</h2>
+                  <form onSubmit={editChannelSubmit}>
+                    <label className="block text-xs font-bold text-[#b5bac1] uppercase mb-2">Nombre del canal</label>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="w-full bg-[#1e1f22] p-2.5 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#5865f2] mb-4 text-sm"
+                      value={editChannelName}
+                      onChange={e => setEditChannelName(e.target.value)}
+                      required
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setShowEditChannel(false)} className="text-[#b5bac1] hover:text-white px-4 py-2 text-sm transition">Cancelar</button>
+                      <button type="submit" className="bg-[#5865f2] hover:bg-[#4752c4] text-white font-semibold py-2 px-5 rounded-lg transition text-sm">Guardar</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* Sidebar de canales */}
             <div className={`w-64 bg-[#2b2d31] flex flex-col shrink-0 absolute sm:relative z-40 h-full transition-transform ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'}`}>
               <div className="h-12 border-b border-[#1e1f22] flex items-center justify-between px-4 shadow-sm shrink-0 hover:bg-[#35373c] cursor-pointer transition">
@@ -323,11 +439,18 @@ export default function MainApp() {
                       <span className="text-[#80848e] mr-2 text-xl">#</span>
                       <span className="flex-1 truncate">{c.name}</span>
                       <button
+                        onClick={e => { e.stopPropagation(); setEditChannelId(c.id); setEditChannelName(c.name); setShowEditChannel(true); }}
+                        className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-[#dbdee1] transition ml-1 p-0.5 rounded"
+                        title="Editar canal"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                      </button>
+                      <button
                         onClick={(e) => deleteChannel(e, c.id)}
-                        className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-red-400 transition ml-1 p-0.5 rounded"
+                        className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-red-400 transition ml-0.5 p-0.5 rounded"
                         title="Borrar canal"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                       </button>
                     </div>
                   ))}
@@ -366,11 +489,18 @@ export default function MainApp() {
                             <span className="text-xs text-[#80848e] mr-1">{participants.length}</span>
                           )}
                           <button
+                            onClick={e => { e.stopPropagation(); setEditChannelId(c.id); setEditChannelName(c.name); setShowEditChannel(true); }}
+                            className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-[#dbdee1] transition p-0.5 rounded shrink-0"
+                            title="Editar canal"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          </button>
+                          <button
                             onClick={(e) => deleteChannel(e, c.id)}
                             className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-red-400 transition p-0.5 rounded shrink-0"
                             title="Borrar canal"
                           >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                           </button>
                         </div>
 
@@ -390,10 +520,10 @@ export default function MainApp() {
                                 <span className={`text-xs truncate flex-1 ${p.userId === user?.id ? 'text-green-400' : 'text-[#b5bac1]'}`}>
                                   {p.username}{p.userId === user?.id ? ' (Tú)' : ''}
                                 </span>
-                                {/* Iconos de estado */}
+                                {/* Iconos de estado - siempre mostrar los que aplican */}
                                 <div className="flex items-center gap-0.5 shrink-0">
                                   {p.isScreenSharing && (
-                                    <span className="text-[9px] bg-red-500 text-white px-1 rounded font-bold uppercase tracking-wider mr-1">Transm.</span>
+                                    <span className="text-[9px] bg-red-500 text-white px-1 rounded font-bold uppercase tracking-wider mr-0.5">Transm.</span>
                                   )}
                                   {p.isMuted && (
                                     <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Silenciado">
@@ -493,22 +623,29 @@ export default function MainApp() {
                     </div>
                   </div>
 
-                  {showUserMenu && (
-                    <div className="absolute bottom-full left-2 mb-2 w-56 bg-[#111214] rounded-lg shadow-xl border border-[#1e1f22] p-1.5 z-50">
-                        <div className="px-2 py-1.5 mb-1 group flex items-center justify-between text-[#dbdee1] hover:bg-[#5865f2] hover:text-white rounded cursor-pointer transition">
-                          <span className="text-sm font-medium">Cambiar nombre</span>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                        </div>
-                        <div className="h-px bg-[#2b2d31] my-1 mx-1"></div>
-                        <div 
-                          onClick={logout}
-                          className="px-2 py-1.5 group flex items-center justify-between text-[#da373c] hover:bg-[#da373c] hover:text-white rounded cursor-pointer transition"
+                    {showUserMenu && (
+                     <div className="absolute bottom-full left-2 mb-2 w-56 bg-[#111214] rounded-lg shadow-xl border border-[#1e1f22] p-1.5 z-50">
+                       <div className="px-2 pt-1 pb-2 border-b border-[#2b2d31] mb-1">
+                         <div className="text-xs text-[#80848e] font-semibold uppercase tracking-wider">{user?.username}</div>
+                         <div className="text-[10px] text-[#4e5058] mt-0.5">Online</div>
+                       </div>
+                       <div
+                         onClick={() => { setNewNameInput(user?.username || ''); setShowChangeName(true); setShowUserMenu(false); }}
+                         className="px-2 py-1.5 mb-0.5 flex items-center gap-2 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white rounded cursor-pointer transition"
                        >
-                          <span className="text-sm font-medium">Cerrar sesión</span>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        </div>
-                    </div>
-                  )}
+                         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                         <span className="text-sm">Cambiar nombre</span>
+                       </div>
+                       <div className="h-px bg-[#2b2d31] my-1 mx-1"></div>
+                       <div
+                         onClick={logout}
+                         className="px-2 py-1.5 flex items-center gap-2 text-[#da373c] hover:bg-[#da373c] hover:text-white rounded cursor-pointer transition"
+                       >
+                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                         <span className="text-sm">Cerrar sesión</span>
+                       </div>
+                     </div>
+                    )}
                 </div>
               </div>
             </div>
@@ -573,72 +710,162 @@ export default function MainApp() {
                       </div>
                     </div>
 
-                    {messages.map((msg, index) => (
-                      <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition group/msg relative">
-                        <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold mt-1">
-                          {msg.user?.username?.[0]?.toUpperCase() || '?'}
-                        </div>
-                        <div className="flex-1 min-w-0 pr-8">
-                          <div className="flex items-baseline">
-                            <span className="text-white font-medium mr-2 hover:underline cursor-pointer">{msg.user?.username || 'Usuario'}</span>
-                            <span className="text-xs text-[#80848e]">
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                    {messages.map((msg, index) => {
+                      // Parse @mentions in message content
+                      const renderContent = (text) => {
+                        const parts = text.split(/(@\w[\w\s]*\w|@\w+)/g);
+                        return parts.map((part, i) => {
+                          if (part.startsWith('@')) {
+                            const mentioned = part.slice(1);
+                            const isMentioningMe = mentioned === user?.username;
+                            return <span key={i} className={`font-semibold px-0.5 rounded ${isMentioningMe ? 'bg-yellow-400/20 text-yellow-300' : 'text-[#5865f2] hover:underline cursor-pointer'}`}>{part}</span>;
+                          }
+                          return part;
+                        });
+                      };
+                      return (
+                        <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition group/msg relative">
+                          <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold mt-1">
+                            {msg.user?.username?.[0]?.toUpperCase() || '?'}
                           </div>
-                          {editingMessage?.id === msg.id ? (
-                            <form onSubmit={submitEdit} className="w-full mt-1">
-                              <input
-                                autoFocus
-                                className="w-full bg-[#383a40] text-[#dbdee1] p-2.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
-                                value={editingMessage.content}
-                                onChange={e => setEditingMessage({ ...editingMessage, content: e.target.value })}
-                                onKeyDown={e => {
-                                  if (e.key === 'Escape') setEditingMessage(null);
-                                }}
-                              />
-                              <div className="text-xs text-[#80848e] mt-1.5">
-                                escape para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={() => setEditingMessage(null)}>cancelar</span> • enter para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={submitEdit}>guardar</span>
-                              </div>
-                            </form>
-                          ) : (
-                            <p className="text-[#dbdee1] break-words">
-                              {msg.content}
-                            </p>
+                          <div className="flex-1 min-w-0 pr-10">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-white font-semibold hover:underline cursor-pointer">{msg.user?.username || 'Usuario'}</span>
+                              <span className="text-[11px] text-[#80848e]">
+                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            {editingMessage?.id === msg.id ? (
+                              <form onSubmit={submitEdit} className="w-full mt-1">
+                                <input
+                                  autoFocus
+                                  className="w-full bg-[#383a40] text-[#dbdee1] px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5865f2] text-sm"
+                                  value={editingMessage.content}
+                                  onChange={e => setEditingMessage({ ...editingMessage, content: e.target.value })}
+                                  onKeyDown={e => { if (e.key === 'Escape') setEditingMessage(null); }}
+                                />
+                                <div className="text-xs text-[#80848e] mt-1">
+                                  escape para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={() => setEditingMessage(null)}>cancelar</span> • enter para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={submitEdit}>guardar</span>
+                                </div>
+                              </form>
+                            ) : (
+                              <p className="text-[#dbdee1] break-words text-sm leading-relaxed mt-0.5">
+                                {renderContent(msg.content)}
+                              </p>
+                            )}
+                          </div>
+                          {/* Botones de accion hovear */}
+                          {msg.user?.id === user?.id && editingMessage?.id !== msg.id && (
+                            <div className="absolute right-4 top-1.5 opacity-0 group-hover/msg:opacity-100 transition bg-[#2b2d31] shadow-lg border border-[#1e1f22] rounded-lg flex overflow-hidden">
+                              <button
+                                onClick={() => setEditingMessage({ id: msg.id, content: msg.content })}
+                                className="px-3 py-1.5 hover:bg-[#35373c] text-[#b5bac1] hover:text-[#dbdee1] text-xs font-semibold transition flex items-center gap-1"
+                                title="Editar mensaje"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                Editar
+                              </button>
+                            </div>
                           )}
                         </div>
-
-                        {/* Botón Editar */}
-                        {msg.user?.id === user?.id && editingMessage?.id !== msg.id && (
-                          <div className="absolute right-4 top-2 opacity-0 group-hover/msg:opacity-100 transition bg-[#313338] shadow-md border border-[#1e1f22] rounded flex overflow-hidden">
-                            <button 
-                              onClick={() => setEditingMessage({ id: msg.id, content: msg.content })}
-                              className="px-3 py-1.5 hover:bg-[#35373c] text-[#b5bac1] hover:text-[#dbdee1] text-xs font-semibold transition"
-                            >
-                              ✏️ Editar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={chatEndRef} />
                   </div>
 
-                  <div className="px-4 pb-6 pt-2 shrink-0">
-                    <div className="relative bg-[#383a40] rounded-lg flex items-center">
-                      <div className="flex items-center justify-center p-3 pl-4">
-                        <div className="w-6 h-6 rounded-full bg-[#4e5058] flex items-center justify-center text-[#dbdee1]">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                  {/* Chat Input with @mention */}
+                  <div className="px-4 pb-5 pt-2 shrink-0">
+                    {showMentionList && mentionQuery && (() => {
+                      const mentionUsers = Object.values(onlineUsers).filter(u => u.online && u.username && u.username.toLowerCase().startsWith(mentionQuery.toLowerCase()) && u.userId !== user?.id);
+                      if (mentionUsers.length === 0) return null;
+                      return (
+                        <div className="mb-2 bg-[#2b2d31] rounded-xl border border-[#1e1f22] shadow-xl overflow-hidden">
+                          <div className="px-3 py-1.5 text-[10px] text-[#80848e] uppercase font-bold tracking-wider border-b border-[#1e1f22]">Mencionar usuario</div>
+                          {mentionUsers.slice(0, 6).map((u, i) => (
+                            <div
+                              key={u.userId}
+                              className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition ${i === mentionIndex ? 'bg-[#404249]' : 'hover:bg-[#35373c]'}`}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                const beforeAt = messageInput.lastIndexOf('@');
+                                const newVal = messageInput.substring(0, beforeAt) + '@' + u.username + ' ';
+                                setMessageInput(newVal);
+                                setShowMentionList(false);
+                                inputRef.current?.focus();
+                              }}
+                            >
+                              <div className="w-6 h-6 rounded-full bg-[#5865f2] flex items-center justify-center text-white text-xs font-bold shrink-0">{u.username[0].toUpperCase()}</div>
+                              <span className="text-[#dbdee1] text-sm font-medium">{u.username}</span>
+                              {i === mentionIndex && <span className="ml-auto text-[10px] text-[#80848e]">Tab para seleccionar</span>}
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                      <form onSubmit={sendMessage} className="flex-1 right-0">
-                        <input 
-                          type="text" 
-                          placeholder={`Enviar mensaje a #${currentChannel.name}`}
-                          className="bg-transparent text-[#dbdee1] w-full py-3 pr-4 focus:outline-none placeholder-[#80848e]"
+                      );
+                    })()}
+
+                    <div className="relative bg-[#383a40] rounded-xl flex items-center gap-1 pl-4 pr-2 shadow-sm">
+                      {/* Plus button */}
+                      <button type="button" className="text-[#80848e] hover:text-[#dbdee1] transition p-1 shrink-0" title="Adjuntar archivo">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                      </button>
+
+                      <form onSubmit={(e) => { e.preventDefault(); sendMessage(e); setShowMentionList(false); }} className="flex-1 flex items-center">
+                        <input
+                          ref={inputRef}
+                          type="text"
+                          placeholder={`Mensaje en #${currentChannel.name}`}
+                          className="bg-transparent text-[#dbdee1] w-full py-3.5 focus:outline-none placeholder-[#4e5058] text-sm"
                           value={messageInput}
-                          onChange={(e) => setMessageInput(e.target.value)}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setMessageInput(val);
+                            const atIdx = val.lastIndexOf('@');
+                            if (atIdx !== -1 && (atIdx === 0 || val[atIdx-1] === ' ')) {
+                              const query = val.slice(atIdx + 1);
+                              if (!query.includes(' ')) {
+                                setMentionQuery(query);
+                                setShowMentionList(true);
+                                setMentionIndex(0);
+                                return;
+                              }
+                            }
+                            setShowMentionList(false);
+                          }}
+                          onKeyDown={e => {
+                            if (showMentionList) {
+                              const mentionUsers = Object.values(onlineUsers).filter(u => u.online && u.username && u.username.toLowerCase().startsWith(mentionQuery.toLowerCase()) && u.userId !== user?.id);
+                              if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => Math.min(i+1, mentionUsers.length-1)); }
+                              if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => Math.max(i-1, 0)); }
+                              if (e.key === 'Tab' || e.key === 'Enter') {
+                                if (mentionUsers[mentionIndex]) {
+                                  e.preventDefault();
+                                  const beforeAt = messageInput.lastIndexOf('@');
+                                  setMessageInput(messageInput.substring(0, beforeAt) + '@' + mentionUsers[mentionIndex].username + ' ');
+                                  setShowMentionList(false);
+                                }
+                              }
+                              if (e.key === 'Escape') { setShowMentionList(false); }
+                            }
+                          }}
                         />
                       </form>
+
+                      {/* Emoji button */}
+                      <button type="button" className="text-[#80848e] hover:text-yellow-400 transition p-1 shrink-0" title="Emoji">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+                      </button>
+
+                      {/* Send button */}
+                      {messageInput.trim() && (
+                        <button
+                          type="button"
+                          onClick={sendMessage}
+                          className="text-[#5865f2] hover:text-[#4752c4] transition p-1 shrink-0"
+                          title="Enviar mensaje"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>

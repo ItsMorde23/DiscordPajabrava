@@ -206,15 +206,32 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       }
     };
 
-    // Receive remote tracks
+    // Receive remote tracks - merge into existing stream without replacing it
     pc.ontrack = (event) => {
-      setRemoteStreams(prev => ({
-        ...prev,
-        [peerUserId]: {
-          username: peerUsername,
-          stream: event.streams[0]
+      const incomingStream = event.streams[0];
+      setRemoteStreams(prev => {
+        const existing = prev[peerUserId];
+        if (existing && existing.stream) {
+          // Add each track to the existing MediaStream to avoid overriding audio
+          incomingStream.getTracks().forEach(track => {
+            const alreadyThere = existing.stream.getTrackById(track.id);
+            if (!alreadyThere) {
+              existing.stream.addTrack(track);
+            }
+          });
+          return {
+            ...prev,
+            [peerUserId]: { username: peerUsername, stream: existing.stream }
+          };
         }
-      }));
+        // First time: create a new stream and clone tracks into it
+        const merged = new MediaStream();
+        incomingStream.getTracks().forEach(t => merged.addTrack(t));
+        return {
+          ...prev,
+          [peerUserId]: { username: peerUsername, stream: merged }
+        };
+      });
     };
 
     return pc;
