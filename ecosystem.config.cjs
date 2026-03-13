@@ -14,46 +14,47 @@ module.exports = {
   apps: [
     // =====================================================
     //  BACKEND — Servidor Node.js / Express / Socket.IO
+    //  Puerto: 3001
     // =====================================================
     {
       name: 'pajabrava-backend',
       script: 'server.js',
-      cwd: './backend',             // Directorio del backend
+      cwd: './backend',
       interpreter: 'node',
-      watch: false,                 // false en produccion (true solo en dev)
+      watch: false,
       instances: 1,
-      autorestart: true,            // Reiniciar automaticamente si crashea
+      autorestart: true,
       max_restarts: 10,
       restart_delay: 3000,
       env: {
         NODE_ENV: 'production',
-        PORT: 3001                  // Puede sobreescribirse desde .env
+        PORT: 3001
       },
-      error_file: './logs/backend-error.log',
-      out_file: './logs/backend-out.log',
+      error_file: '../logs/backend-error.log',
+      out_file: '../logs/backend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
 
     // =====================================================
-    //  FRONTEND — Build estático servido con "serve" local
-    //  serve está en frontend/node_modules/.bin/serve
-    //  (instalado como dependencia local del frontend)
+    //  FRONTEND — Servidor estático Node.js puro
+    //  Puerto: 8080  →  http://IP_DEL_VPS:8080
+    //  Sirve la carpeta frontend/dist (build de Vite)
     // =====================================================
     {
       name: 'pajabrava-frontend',
-      script: 'node_modules/.bin/serve',   // binario local, siempre funciona
-      args: '-s dist -l 5173',
-      cwd: './frontend',
-      interpreter: 'none',
+      script: 'frontend-server.mjs',   // servidor Node.js puro, sin dependencias
+      cwd: './',
+      interpreter: 'node',
       watch: false,
       autorestart: true,
       max_restarts: 10,
       restart_delay: 3000,
       env: {
         NODE_ENV: 'production',
+        FRONTEND_PORT: 8080
       },
-      error_file: '../logs/frontend-error.log',
-      out_file: '../logs/frontend-out.log',
+      error_file: './logs/frontend-error.log',
+      out_file: './logs/frontend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     }
   ]
