@@ -12,6 +12,16 @@ export const WebRTCProvider = ({ children, socket, user }) => {
   const [isDeafened, setIsDeafened] = useState(false);
   
   const peerConnections = useRef({});
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
+
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
 
   const iceServers = {
     iceServers: [
@@ -105,22 +115,24 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       socket.off('webrtc_ice_candidate', handleIceCandidate);
       socket.off('user_left_voice', handleUserLeft);
     };
-  }, [socket, user, localStream, screenStream]);
+  }, [socket, user]);
 
   const createPeerConnection = (socketId, peerUserId, peerUsername) => {
     const pc = new RTCPeerConnection(iceServers);
     peerConnections.current[socketId] = pc;
 
-    // Add local tracks
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        pc.addTrack(track, localStream);
+    // Add local tracks from refs
+    const currentLocalStream = localStreamRef.current;
+    if (currentLocalStream) {
+      currentLocalStream.getTracks().forEach(track => {
+        pc.addTrack(track, currentLocalStream);
       });
     }
 
-    if (screenStream) {
-       screenStream.getTracks().forEach(track => {
-         pc.addTrack(track, screenStream);
+    const currentScreenStream = screenStreamRef.current;
+    if (currentScreenStream) {
+       currentScreenStream.getTracks().forEach(track => {
+         pc.addTrack(track, currentScreenStream);
        });
     }
 

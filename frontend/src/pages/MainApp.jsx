@@ -77,12 +77,12 @@ export default function MainApp() {
               const retryData = await retryChannels.json();
               setChannels(Array.isArray(retryData) ? retryData : []);
               const firstText = retryData.find(c => c.type === 'text');
-              if (firstText) selectTextChannel(firstText);
+              if (firstText) selectTextChannel(firstText, newSocket);
            }
         } else {
            setChannels(validChannels);
            const defaultText = validChannels.find(c => c.type === 'text');
-           if (defaultText) selectTextChannel(defaultText);
+           if (defaultText) selectTextChannel(defaultText, newSocket);
         }
       } catch (err) {
         console.error('Error fetching channel data', err);
@@ -92,12 +92,12 @@ export default function MainApp() {
     fetchInitialData();
 
     return () => newSocket.close();
-  }, [token, socket]);
+  }, [token]);
 
-  const selectTextChannel = async (channel) => {
+  const selectTextChannel = async (channel, activeSocket = socket) => {
     setCurrentChannel(channel);
-    if (socket) {
-      socket.emit('join_text_channel', channel.id);
+    if (activeSocket) {
+      activeSocket.emit('join_text_channel', channel.id);
     }
     try {
       const msgRes = await fetch(`${import.meta.env.VITE_API_URL}/api/channels/${channel.id}/messages`, {
