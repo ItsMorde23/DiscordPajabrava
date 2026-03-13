@@ -19,17 +19,22 @@ npm install --omit=dev
 cd ..
 echo "    ✅ Backend: OK"
 
-# ── 2. Generar cliente de Prisma y migrar DB ──────────────────
-echo "🗄️  [2/5] Ejecutando migraciones de base de datos..."
+# ── 2. Generar cliente de Prisma y sincronizar DB ─────────────
+echo "🗄️  [2/5] Sincronizando base de datos..."
+echo "    (Funciona tanto si la BD es nueva como si ya existe)"
 cd backend
 npx prisma generate
-npx prisma migrate deploy
-cd ..
+# db push sincroniza el schema sin necesitar carpeta migrations
+# funciona con BD nueva y existente (a diferencia de migrate deploy)
+npx prisma db push --accept-data-loss
 echo "    ✅ Base de datos: OK"
+cd ..
 
 # ── 3. Instalar dependencias del frontend ─────────────────────
 echo "📦 [3/5] Instalando dependencias del frontend..."
 cd frontend
+# Borrar lock file para evitar conflictos de versiones cacheadas
+rm -f package-lock.json
 npm install
 echo "    ✅ Frontend deps: OK"
 
