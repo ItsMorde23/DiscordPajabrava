@@ -4,6 +4,7 @@ import { verifyToken } from './auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+import { voiceParticipants } from '../sockets/index.js';
 
 // Obtener todos los canales
 router.get('/', verifyToken, async (req, res) => {
@@ -90,6 +91,11 @@ router.delete('/:channelId', verifyToken, async (req, res) => {
   try {
     const channelId = parseInt(req.params.channelId);
     if (isNaN(channelId)) return res.status(400).json({ error: 'ID inválido' });
+
+    // Verificar si hay usuarios en el canal de voz
+    if (voiceParticipants[channelId] && voiceParticipants[channelId].length > 0) {
+      return res.status(400).json({ error: 'No podés borrar un canal de voz mientas hay usuarios conectados' });
+    }
 
     // Primero borrar mensajes del canal
     await prisma.message.deleteMany({ where: { channelId } });

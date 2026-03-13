@@ -17,8 +17,11 @@ export default function MainApp() {
   const [newChannelType, setNewChannelType] = useState('text');
   const [voiceNotifications, setVoiceNotifications] = useState([]);
   const [showVoicePanel, setShowVoicePanel] = useState(false);
-  // { [channelId]: [ { userId, username } ] }
   const [voiceChannelUsers, setVoiceChannelUsers] = useState({});
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showMobileMembers, setShowMobileMembers] = useState(false);
+  const [editingMessage, setEditingMessage] = useState(null);
 
   const chatEndRef = useRef(null);
   const notifTimerRef = useRef(null);
@@ -51,6 +54,10 @@ export default function MainApp() {
 
     newSocket.on('receive_message', (msg) => {
       setMessages(prev => [...prev, msg]);
+    });
+
+    newSocket.on('message_edited', (editedMsg) => {
+      setMessages(prev => prev.map(msg => msg.id === editedMsg.id ? editedMsg : msg));
     });
 
     newSocket.on('channel_created', (newChannel) => {
@@ -175,7 +182,7 @@ export default function MainApp() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ name: newChannelName.toLowerCase().replace(/\s+/g, '-'), type: newChannelType })
+        body: JSON.stringify({ name: newChannelName, type: newChannelType })
       });
 
       if (res.ok) {
@@ -221,6 +228,18 @@ export default function MainApp() {
     });
 
     setMessageInput('');
+  };
+
+  const submitEdit = (e) => {
+    e?.preventDefault();
+    if (!editingMessage?.content?.trim() || !currentChannel || !socket) return;
+
+    socket.emit('edit_message', {
+      id: editingMessage.id,
+      channelId: currentChannel.id,
+      content: editingMessage.content
+    });
+    setEditingMessage(null);
   };
 
   const textChannels = channels.filter(c => c.type === 'text');
@@ -281,7 +300,7 @@ export default function MainApp() {
             )}
 
             {/* Sidebar de canales */}
-            <div className="w-64 bg-[#2b2d31] flex flex-col hidden sm:flex shrink-0">
+            <div className={`w-64 bg-[#2b2d31] flex flex-col shrink-0 absolute sm:relative z-40 h-full transition-transform ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'}`}>
               <div className="h-12 border-b border-[#1e1f22] flex items-center justify-between px-4 shadow-sm shrink-0 hover:bg-[#35373c] cursor-pointer transition">
                 <span className="font-bold text-white truncate">Pajabrava (Single Server)</span>
               </div>
@@ -373,15 +392,20 @@ export default function MainApp() {
                                 </span>
                                 {/* Iconos de estado */}
                                 <div className="flex items-center gap-0.5 shrink-0">
-                                  {p.isDeafened ? (
-                                    <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Ensordecido">
-                                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-                                    </svg>
-                                  ) : p.isMuted ? (
+                                  {p.isScreenSharing && (
+                                    <span className="text-[9px] bg-red-500 text-white px-1 rounded font-bold uppercase tracking-wider mr-1">Transm.</span>
+                                  )}
+                                  {p.isMuted && (
                                     <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Silenciado">
                                       <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
                                     </svg>
-                                  ) : (
+                                  )}
+                                  {p.isDeafened && (
+                                    <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Ensordecido">
+                                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                                    </svg>
+                                  )}
+                                  {!p.isMuted && !p.isDeafened && !p.isScreenSharing && (
                                     <svg className="text-[#80848e]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Micrófono activo">
                                       <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
                                     </svg>
@@ -396,71 +420,111 @@ export default function MainApp() {
                   })}
                 </div>
               </div>
-
-              {/* User Panel */}
-              <div className="bg-[#232428] h-14 flex items-center px-2 shrink-0">
-                <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-2 cursor-pointer flex items-center justify-center text-white font-bold">
-                  {user?.username?.[0]?.toUpperCase()}
-                  <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-[#232428]"></div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{user?.username}</div>
-                  <div className="text-xs text-[#b5bac1] truncate flex items-center">
-                    {webrtc?.inVoiceChannel ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 shrink-0"></span>
-                        <span>En llamada</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 shrink-0"></span>
-                        <span>Online</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                
+              {/* Voice Connected & User Panel Container */}
+              <div className="shrink-0 flex flex-col bg-[#232428]">
                 {webrtc?.inVoiceChannel && (
-                  <div className="flex mr-1">
-                    <button
-                      onClick={webrtc.toggleMute}
-                      title={webrtc.isMuted ? 'Activar micrófono' : 'Silenciar micrófono'}
-                      className={`p-1.5 mr-0.5 rounded hover:bg-[#35373c] transition ${webrtc.isMuted ? 'text-red-400' : 'text-[#b5bac1]'}`}
-                    >
-                      {webrtc.isMuted ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
-                      )}
-                    </button>
-                    <button
-                      onClick={webrtc.toggleDeafen}
-                      title={webrtc.isDeafened ? 'Dejar de ensordecerse' : 'Ensordecerse'}
-                      className={`p-1.5 rounded hover:bg-[#35373c] transition ${webrtc.isDeafened ? 'text-red-400' : 'text-[#b5bac1]'}`}
-                    >
-                      {webrtc.isDeafened ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-                      )}
-                    </button>
+                  <div className="border-b border-[#1e1f22] p-2 flex flex-col gap-2 bg-[#101010] bg-opacity-30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <svg className="text-green-500" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+                        </svg>
+                        <div className="flex flex-col">
+                          <span className="text-green-500 text-sm font-bold leading-tight">Voz conectada</span>
+                          <span className="text-[#80848e] text-xs leading-none mt-0.5 truncate max-w-[120px]">
+                            {channels.find(c => c.id === webrtc.inVoiceChannel)?.name} / Pajabrava
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => webrtc.leaveVoiceChannel()}
+                        className="text-[#80848e] hover:text-red-500 transition p-1"
+                        title="Desconectar"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5 h-8">
+                       <button
+                          onClick={webrtc.toggleMute}
+                          className={`flex-1 rounded flex items-center justify-center transition ${webrtc.isMuted ? 'bg-[#35373c] text-red-400' : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1]'}`}
+                          title={webrtc.isMuted ? "Activar micrófono" : "Silenciar micrófono"}
+                       >
+                          {webrtc.isMuted ? (
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
+                          ) : (
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+                          )}
+                       </button>
+                       <button
+                          onClick={webrtc.toggleDeafen}
+                          className={`flex-1 rounded flex items-center justify-center transition ${webrtc.isDeafened ? 'bg-[#35373c] text-red-400' : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1]'}`}
+                          title={webrtc.isDeafened ? "Dejar de ensordecer" : "Ensordecer"}
+                       >
+                          {webrtc.isDeafened ? (
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                          ) : (
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                          )}
+                       </button>
+                       <button
+                          onClick={webrtc.shareScreen}
+                          className={`flex-1 rounded flex items-center justify-center transition ${webrtc.screenStream ? 'bg-[#35373c] text-green-400' : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1]'}`}
+                          title={webrtc.screenStream ? "Dejar de compartir pantalla" : "Compartir pantalla"}
+                       >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.11 0-2 .89-2 2v12c0 1.1.89 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.11-.9-2-2-2zm0 14H3V5h18v12zm-5-7v2h-3v3h-2v-3H8v-2h3V7h2v3h3z"/></svg>
+                       </button>
+                    </div>
                   </div>
                 )}
+                
+                <div className="h-14 flex items-center px-2 shrink-0 relative">
+                  <div 
+                    className="flex flex-1 items-center hover:bg-[#35373c] p-1.5 rounded cursor-pointer transition select-none"
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-2 flex items-center justify-center text-white font-bold shrink-0">
+                      {user?.username?.[0]?.toUpperCase()}
+                      <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-[#232428]"></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-white truncate leading-tight">{user?.username}</div>
+                      <div className="text-xs text-[#b5bac1] truncate leading-tight">Online</div>
+                    </div>
+                  </div>
 
-                <button onClick={logout} className="text-[#b5bac1] hover:text-[#dbdee1] p-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                </button>
+                  {showUserMenu && (
+                    <div className="absolute bottom-full left-2 mb-2 w-56 bg-[#111214] rounded-lg shadow-xl border border-[#1e1f22] p-1.5 z-50">
+                        <div className="px-2 py-1.5 mb-1 group flex items-center justify-between text-[#dbdee1] hover:bg-[#5865f2] hover:text-white rounded cursor-pointer transition">
+                          <span className="text-sm font-medium">Cambiar nombre</span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </div>
+                        <div className="h-px bg-[#2b2d31] my-1 mx-1"></div>
+                        <div 
+                          onClick={logout}
+                          className="px-2 py-1.5 group flex items-center justify-between text-[#da373c] hover:bg-[#da373c] hover:text-white rounded cursor-pointer transition"
+                       >
+                          <span className="text-sm font-medium">Cerrar sesión</span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Main Content Area */}
+            {showMobileSidebar && (
+              <div className="absolute inset-0 bg-black/50 z-30 sm:hidden" onClick={() => setShowMobileSidebar(false)}></div>
+            )}
+            
             <div className="flex-1 flex flex-col bg-[#313338] min-w-0">
               {webrtc?.inVoiceChannel && showVoicePanel ? (
                 // Voice Panel con botón para volver al texto
                 <div className="flex-1 flex flex-col min-h-0">
                   <VoicePanel
                     webrtc={webrtc}
-                    onlineUsers={onlineUsers}
+                    participants={voiceChannelUsers[webrtc.inVoiceChannel] || []}
                     user={user}
                     channelName={channels.find(c => c.id === webrtc.inVoiceChannel)?.name}
                   />
@@ -481,7 +545,15 @@ export default function MainApp() {
                 <>
                   {/* Header del canal de texto - con indicador de voz activa */}
                   <div className="h-12 border-b border-[#2b2d31] flex items-center px-4 font-semibold text-white shadow-sm shrink-0">
+                    <button className="mr-3 sm:hidden text-[#80848e] hover:text-[#dbdee1]" onClick={() => setShowMobileSidebar(true)}>
+                       <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+                    </button>
                     <span className="text-[#80848e] text-2xl mr-2">#</span> {currentChannel.name}
+                    
+                    <button className="ml-auto lg:hidden text-[#80848e] hover:text-[#dbdee1]" onClick={() => setShowMobileMembers(true)}>
+                       <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </button>
+                    
                     {webrtc?.inVoiceChannel && (
                       <button
                         onClick={() => setShowVoicePanel(true)}
@@ -502,34 +574,72 @@ export default function MainApp() {
                     </div>
 
                     {messages.map((msg, index) => (
-                      <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition">
-                        <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold">
+                      <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition group/msg relative">
+                        <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold mt-1">
                           {msg.user?.username?.[0]?.toUpperCase() || '?'}
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0 pr-8">
                           <div className="flex items-baseline">
                             <span className="text-white font-medium mr-2 hover:underline cursor-pointer">{msg.user?.username || 'Usuario'}</span>
                             <span className="text-xs text-[#80848e]">
                               {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <p className="text-[#dbdee1] break-words">{msg.content}</p>
+                          {editingMessage?.id === msg.id ? (
+                            <form onSubmit={submitEdit} className="w-full mt-1">
+                              <input
+                                autoFocus
+                                className="w-full bg-[#383a40] text-[#dbdee1] p-2.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+                                value={editingMessage.content}
+                                onChange={e => setEditingMessage({ ...editingMessage, content: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Escape') setEditingMessage(null);
+                                }}
+                              />
+                              <div className="text-xs text-[#80848e] mt-1.5">
+                                escape para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={() => setEditingMessage(null)}>cancelar</span> • enter para <span className="text-[#00a8fc] cursor-pointer hover:underline" onClick={submitEdit}>guardar</span>
+                              </div>
+                            </form>
+                          ) : (
+                            <p className="text-[#dbdee1] break-words">
+                              {msg.content}
+                            </p>
+                          )}
                         </div>
+
+                        {/* Botón Editar */}
+                        {msg.user?.id === user?.id && editingMessage?.id !== msg.id && (
+                          <div className="absolute right-4 top-2 opacity-0 group-hover/msg:opacity-100 transition bg-[#313338] shadow-md border border-[#1e1f22] rounded flex overflow-hidden">
+                            <button 
+                              onClick={() => setEditingMessage({ id: msg.id, content: msg.content })}
+                              className="px-3 py-1.5 hover:bg-[#35373c] text-[#b5bac1] hover:text-[#dbdee1] text-xs font-semibold transition"
+                            >
+                              ✏️ Editar
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div ref={chatEndRef} />
                   </div>
 
-                  <div className="p-4 shrink-0">
-                    <form onSubmit={sendMessage} className="bg-[#383a40] rounded-lg p-3 flex items-center">
-                      <input 
-                        type="text" 
-                        placeholder={`Enviar mensaje a #${currentChannel.name}`}
-                        className="bg-transparent text-[#dbdee1] flex-1 focus:outline-none"
-                        value={messageInput}
-                        onChange={(e) => setMessageInput(e.target.value)}
-                      />
-                    </form>
+                  <div className="px-4 pb-6 pt-2 shrink-0">
+                    <div className="relative bg-[#383a40] rounded-lg flex items-center">
+                      <div className="flex items-center justify-center p-3 pl-4">
+                        <div className="w-6 h-6 rounded-full bg-[#4e5058] flex items-center justify-center text-[#dbdee1]">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                        </div>
+                      </div>
+                      <form onSubmit={sendMessage} className="flex-1 right-0">
+                        <input 
+                          type="text" 
+                          placeholder={`Enviar mensaje a #${currentChannel.name}`}
+                          className="bg-transparent text-[#dbdee1] w-full py-3 pr-4 focus:outline-none placeholder-[#80848e]"
+                          value={messageInput}
+                          onChange={(e) => setMessageInput(e.target.value)}
+                        />
+                      </form>
+                    </div>
                   </div>
                 </>
               ) : (
@@ -541,22 +651,30 @@ export default function MainApp() {
 
             {/* Right Sidebar - Usuarios conectados */}
             {!(webrtc?.inVoiceChannel && showVoicePanel) && (
-              <div className="w-60 bg-[#2b2d31] hidden lg:block overflow-y-auto shrink-0 border-l border-[#1e1f22]">
-                <h3 className="text-xs font-semibold text-[#80848e] uppercase tracking-wider p-4 pb-2">
-                  Conectados — {Object.values(onlineUsers).filter(u => u.online).length}
-                </h3>
-                <div className="px-2 space-y-1">
-                  {Object.values(onlineUsers).filter(u => u.online && u.username).map((u) => (
-                    <div key={u.userId} className="flex items-center px-2 py-1.5 hover:bg-[#35373c] rounded cursor-pointer transition">
-                      <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-3 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                        {u.username?.[0]?.toUpperCase()}
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-[#2b2d31]"></div>
+              <>
+                <div className={`w-60 bg-[#2b2d31] overflow-y-auto shrink-0 border-l border-[#1e1f22] absolute lg:relative right-0 z-40 h-full transition-transform ${showMobileMembers ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+                  <h3 className="text-xs font-semibold text-[#80848e] uppercase tracking-wider p-4 pb-2 flex justify-between items-center">
+                    <span>Conectados — {Object.values(onlineUsers).filter(u => u.online).length}</span>
+                    <button className="lg:hidden text-[#80848e] hover:text-white" onClick={() => setShowMobileMembers(false)}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+                  </h3>
+                  <div className="px-2 space-y-1">
+                    {Object.values(onlineUsers).filter(u => u.online && u.username).map((u) => (
+                      <div key={u.userId} className="flex items-center px-2 py-1.5 hover:bg-[#35373c] rounded cursor-pointer transition">
+                        <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-3 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                          {u.username?.[0]?.toUpperCase()}
+                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-[#2b2d31]"></div>
+                        </div>
+                        <span className="text-[#dbdee1] text-sm truncate">{u.username}</span>
                       </div>
-                      <span className="text-[#dbdee1] text-sm truncate">{u.username}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+                {showMobileMembers && (
+                  <div className="absolute inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setShowMobileMembers(false)}></div>
+                )}
+              </>
             )}
           </div>
         )}

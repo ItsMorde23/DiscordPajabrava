@@ -190,9 +190,9 @@ export const WebRTCProvider = ({ children, socket, user }) => {
     }
 
     const currentScreenStream = screenStreamRef.current;
-    if (currentScreenStream) {
+    if (currentScreenStream && currentLocalStream) {
        currentScreenStream.getTracks().forEach(track => {
-         pc.addTrack(track, currentScreenStream);
+         pc.addTrack(track, currentLocalStream);
        });
     }
 
@@ -305,15 +305,31 @@ export const WebRTCProvider = ({ children, socket, user }) => {
         // Stop sharing
         screenStream.getTracks().forEach(track => track.stop());
         setScreenStream(null);
+        if (socket && inVoiceChannel) {
+          socket.emit('voice_state_update', {
+            channelId: inVoiceChannel,
+            isScreenSharing: false
+          });
+        }
         // Need to renegotiate peers (remove track). Keep simple for now: renegotiation requires full implementation. 
       } else {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
         setScreenStream(stream);
+
+        if (socket && inVoiceChannel) {
+          socket.emit('voice_state_update', {
+            channelId: inVoiceChannel,
+            isScreenSharing: true
+          });
+        }
 
         // Add track to existing connections and renegotiate
         Object.keys(peerConnections.current).forEach(async (socketId) => {
           const pc = peerConnections.current[socketId];
-          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+          stream.getTracks().forEach(track => {
+             // Add track associated with the local audio stream
+             pc.addTrack(track, localStreamRef.current);
+          });
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit('webrtc_offer', {

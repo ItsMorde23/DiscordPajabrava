@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 
 // Componente para renderizar Video o un Marco con Audio y Volume Slider
-const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened }) => {
+const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened, isScreenSharing }) => {
   const [volume, setVolume] = useState(1); // 0 a 2, pero mostramos 0-200%
+  const [isHidden, setHidden] = useState(false);
 
   useEffect(() => {
     const audioEl = document.getElementById(`peer-audio-${peerId}`);
@@ -12,13 +13,14 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened 
     }
   }, [volume, peerId]);
 
-  const hasVideo = streamData?.stream?.getVideoTracks().length > 0;
+  const hasVideoTrack = streamData?.stream?.getVideoTracks().length > 0;
+  const hasVideo = hasVideoTrack && !isHidden;
 
-  // Color del borde: verde si habla (podría mejorarse con VAD), rojo si muted (local)
-  const borderColor = isLocal && isMuted ? 'border-red-500' : 'border-transparent';
+  // Color del borde: rojo si transmite
+  const borderColor = isScreenSharing ? 'border-red-500' : isLocal && isMuted ? 'border-red-500/50' : 'border-transparent';
 
   return (
-    <div className={`bg-[#1e1f22] rounded-lg overflow-hidden flex flex-col min-h-[200px] relative group border-2 ${borderColor} shadow-xl m-2 flex-1 basis-[280px] transition-all`}>
+    <div className={`bg-[#1e1f22] rounded-lg overflow-hidden flex flex-col relative group border-2 ${borderColor} shadow-xl m-2 transition-all ${isScreenSharing ? 'w-full min-h-[400px] h-[60vh] order-first' : 'flex-1 basis-[280px] min-h-[200px]'}`}>
       {/* Video o Placeholder */}
       {hasVideo ? (
         <video
@@ -70,11 +72,22 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened 
           />
         </div>
       )}
+      {/* Botón para ocultar/mostrar (solo si hay video) */}
+      {hasVideoTrack && !isLocal && (
+        <div className="absolute top-3 left-3 z-20 opacity-0 group-hover:opacity-100 transition backdrop-blur-sm">
+          <button 
+            onClick={() => setHidden(!isHidden)} 
+            className="bg-black/70 text-white hover:bg-[#35373c] px-3 py-1.5 rounded text-xs font-semibold"
+          >
+            {isHidden ? '👁️ Mostrar Pantalla' : '🙈 Ocultar Pantalla'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
-export default function VoicePanel({ webrtc, user, channelName }) {
+export default function VoicePanel({ webrtc, user, channelName, participants }) {
   return (
     <div className="flex-1 flex flex-col bg-[#111214] p-4 overflow-y-auto min-h-0">
       <div className="flex justify-between items-center mb-6 shrink-0 flex-wrap gap-3">
@@ -142,20 +155,25 @@ export default function VoicePanel({ webrtc, user, channelName }) {
           isLocal={true}
           isMuted={webrtc.isMuted}
           isDeafened={webrtc.isDeafened}
+          isScreenSharing={!!webrtc.screenStream}
         />
 
         {/* Streams remotos */}
-        {Object.entries(webrtc.remoteStreams).map(([peerId, streamData]) => (
-          <PeerVideo
-            key={peerId}
-            peerId={peerId}
-            username={streamData.username}
-            streamData={streamData}
-            isLocal={false}
-            isMuted={false}
-            isDeafened={false}
-          />
-        ))}
+        {Object.entries(webrtc.remoteStreams).map(([peerId, streamData]) => {
+          const p = participants?.find(p => p.userId === peerId) || {};
+          return (
+            <PeerVideo
+              key={peerId}
+              peerId={peerId}
+              username={streamData.username}
+              streamData={streamData}
+              isLocal={false}
+              isMuted={p.isMuted || false}
+              isDeafened={p.isDeafened || false}
+              isScreenSharing={p.isScreenSharing || false}
+            />
+          );
+        })}
       </div>
     </div>
   );

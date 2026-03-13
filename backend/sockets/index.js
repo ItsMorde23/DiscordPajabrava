@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
-// Mapa en memoria: { channelId: [ { userId, username, socketId, isMuted, isDeafened } ] }
-const voiceParticipants = {};
+// Mapa en memoria: { channelId: [ { userId, username, socketId, isMuted, isDeafened, isScreenSharing } ] }
+export const voiceParticipants = {};
 
 export function setupSockets(io) {
   // Middleware de autenticación para socket.io
@@ -100,6 +100,23 @@ export function setupSockets(io) {
       }
     });
 
+    // Editar mensaje
+    socket.on('edit_message', async ({ id, channelId, content }) => {
+      try {
+        const existingMessage = await prisma.message.findUnique({ where: { id } });
+        if (!existingMessage || existingMessage.userId !== socket.user.id) return;
+
+        const updatedMessage = await prisma.message.update({
+          where: { id },
+          data: { content },
+          include: { user: { select: { id: true, username: true } } }
+        });
+        io.to(`text_${channelId}`).emit('message_edited', updatedMessage);
+      } catch (err) {
+        console.error('Error editing message:', err);
+      }
+    });
+
     // --- WEBRTC SIGNALING ---
     // Unirse a un canal de voz
     socket.on('join_voice', (channelId) => {
@@ -113,7 +130,8 @@ export function setupSockets(io) {
           username: socket.user.username,
           socketId: socket.id,
           isMuted: false,
-          isDeafened: false
+          isDeafened: false,
+          isScreenSharing: false
         });
       }
 
@@ -156,13 +174,14 @@ export function setupSockets(io) {
       });
     });
 
-    // Actualizar estado de mute/deafen de un participante
-    socket.on('voice_state_update', ({ channelId, isMuted, isDeafened }) => {
+    // Actualizar estado de mute/deafen/screen de un participante
+    socket.on('voice_state_update', ({ channelId, isMuted, isDeafened, isScreenSharing }) => {
       if (voiceParticipants[channelId]) {
         const participant = voiceParticipants[channelId].find(p => p.userId === socket.user.id);
         if (participant) {
-          participant.isMuted = isMuted;
-          participant.isDeafened = isDeafened;
+          if (isMuted !== undefined) participant.isMuted = isMuted;
+          if (isDeafened !== undefined) participant.isDeafened = isDeafened;
+          if (isScreenSharing !== undefined) participant.isScreenSharing = isScreenSharing;
         }
       }
 
