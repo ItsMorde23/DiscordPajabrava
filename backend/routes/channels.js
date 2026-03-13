@@ -85,4 +85,27 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
   }
 });
 
+// Borrar un canal
+router.delete('/:channelId', verifyToken, async (req, res) => {
+  try {
+    const channelId = parseInt(req.params.channelId);
+    if (isNaN(channelId)) return res.status(400).json({ error: 'ID inválido' });
+
+    // Primero borrar mensajes del canal
+    await prisma.message.deleteMany({ where: { channelId } });
+    await prisma.channel.delete({ where: { id: channelId } });
+
+    // Notificar a todos via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('channel_deleted', { channelId });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 export default router;

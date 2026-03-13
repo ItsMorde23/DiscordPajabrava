@@ -15,8 +15,21 @@ export default function MainApp() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState('text');
-  
+  const [voiceNotifications, setVoiceNotifications] = useState([]);
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
+  // { [channelId]: [ { userId, username } ] }
+  const [voiceChannelUsers, setVoiceChannelUsers] = useState({});
+
   const chatEndRef = useRef(null);
+  const notifTimerRef = useRef(null);
+
+  const addVoiceNotification = (msg) => {
+    const id = Date.now();
+    setVoiceNotifications(prev => [...prev, { id, msg }]);
+    setTimeout(() => {
+      setVoiceNotifications(prev => prev.filter(n => n.id !== id));
+    }, 4000);
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -42,16 +55,55 @@ export default function MainApp() {
 
     newSocket.on('channel_created', (newChannel) => {
       setChannels(prev => {
-        // Evitar duplicados si nosotros mismos lo creamos
         if (prev.find(c => c.id === newChannel.id)) return prev;
         return [...prev, newChannel];
       });
+    });
+
+    // Evento de canal borrado
+    newSocket.on('channel_deleted', ({ channelId }) => {
+      setChannels(prev => prev.filter(c => c.id !== channelId));
+      setCurrentChannel(prev => prev?.id === channelId ? null : prev);
+    });
+
+    // Notificaciones de voz join/leave
+    newSocket.on('user_joined_voice', ({ username }) => {
+      addVoiceNotification(`🔊 ${username} se unió al canal de voz`);
+    });
+    newSocket.on('user_left_voice', ({ username }) => {
+      addVoiceNotification(`🔕 ${username} salió del canal de voz`);
+    });
+
+    // Lista de participantes en canales de voz
+    newSocket.on('voice_participants_update', ({ channelId, participants }) => {
+      setVoiceChannelUsers(prev => ({ ...prev, [channelId]: participants }));
+    });
+
+    // Estado inicial de todos los canales de voz al conectarse
+    newSocket.on('voice_initial_state', (allParticipants) => {
+      // allParticipants = { channelId: [ {...} ] }
+      const parsed = {};
+      Object.entries(allParticipants).forEach(([chId, parts]) => {
+        parsed[parseInt(chId)] = parts;
+      });
+      setVoiceChannelUsers(parsed);
     });
 
     setSocket(newSocket);
 
     const fetchInitialData = async () => {
       try {
+        // Fetch usuarios online iniciales
+        const resUsers = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/online-users`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (resUsers.ok) {
+          const usersData = await resUsers.json();
+          const usersMap = {};
+          usersData.forEach(u => { usersMap[u.id] = { userId: u.id, username: u.username, online: true }; });
+          setOnlineUsers(usersMap);
+        }
+
         // Fetch all channels
         const resChannels = await fetch(`${import.meta.env.VITE_API_URL}/api/channels`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -96,6 +148,7 @@ export default function MainApp() {
 
   const selectTextChannel = async (channel, activeSocket = socket) => {
     setCurrentChannel(channel);
+    setShowVoicePanel(false);
     if (activeSocket) {
       activeSocket.emit('join_text_channel', channel.id);
     }
@@ -126,13 +179,28 @@ export default function MainApp() {
       });
 
       if (res.ok) {
-        const newChannel = await res.json();
-        // El listener 'channel_created' se encarga de agregarlo al estado para todos, incluyendo nosotros
         setShowCreateChannel(false);
         setNewChannelName('');
       } else {
         const error = await res.json();
         alert(error.error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteChannel = async (e, channelId) => {
+    e.stopPropagation();
+    if (!window.confirm('¿Estás seguro de que querés borrar este canal? Se borrarán todos sus mensajes.')) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/channels/${channelId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error);
       }
     } catch (err) {
       console.error(err);
@@ -164,6 +232,15 @@ export default function MainApp() {
         {(webrtc) => (
           <div className="flex h-screen bg-[#313338] text-[#dbdee1] overflow-hidden relative">
             
+            {/* Notificaciones de voz flotantes */}
+            <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+              {voiceNotifications.map(n => (
+                <div key={n.id} className="bg-[#1e1f22] border border-[#3f4147] text-white text-sm px-4 py-2.5 rounded-lg shadow-xl animate-fade-in-down">
+                  {n.msg}
+                </div>
+              ))}
+            </div>
+
             {/* Modal Crear Canal */}
             {showCreateChannel && (
               <div className="absolute inset-0 bg-black/70 z-50 flex items-center justify-center">
@@ -203,13 +280,14 @@ export default function MainApp() {
               </div>
             )}
 
-            {/* Sidebar de canales y amigos */}
+            {/* Sidebar de canales */}
             <div className="w-64 bg-[#2b2d31] flex flex-col hidden sm:flex shrink-0">
               <div className="h-12 border-b border-[#1e1f22] flex items-center justify-between px-4 shadow-sm shrink-0 hover:bg-[#35373c] cursor-pointer transition">
                 <span className="font-bold text-white truncate">Pajabrava (Single Server)</span>
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-5">
+                {/* Canales de Texto */}
                 <div>
                   <div className="flex items-center justify-between mb-1 group">
                     <h3 className="text-xs font-semibold text-[#80848e] group-hover:text-[#dbdee1] uppercase tracking-wider transition cursor-default">Canales de Texto</h3>
@@ -221,13 +299,22 @@ export default function MainApp() {
                     <div 
                       key={c.id}
                       onClick={() => selectTextChannel(c)}
-                      className={`flex items-center rounded px-2 py-1.5 cursor-pointer transition mb-0.5 ${currentChannel?.id === c.id ? 'bg-[#404249] text-white font-medium' : 'text-[#80848e] hover:text-[#dbdee1] hover:bg-[#35373c]'}`}
+                      className={`flex items-center rounded px-2 py-1.5 cursor-pointer transition mb-0.5 group/ch ${currentChannel?.id === c.id && !showVoicePanel ? 'bg-[#404249] text-white font-medium' : 'text-[#80848e] hover:text-[#dbdee1] hover:bg-[#35373c]'}`}
                     >
-                      <span className="text-[#80848e] mr-2 text-xl">#</span> {c.name}
+                      <span className="text-[#80848e] mr-2 text-xl">#</span>
+                      <span className="flex-1 truncate">{c.name}</span>
+                      <button
+                        onClick={(e) => deleteChannel(e, c.id)}
+                        className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-red-400 transition ml-1 p-0.5 rounded"
+                        title="Borrar canal"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                      </button>
                     </div>
                   ))}
                 </div>
                 
+                {/* Canales de Voz */}
                 <div>
                   <div className="flex items-center justify-between mb-1 group">
                     <h3 className="text-xs font-semibold text-[#80848e] group-hover:text-[#dbdee1] uppercase tracking-wider transition cursor-default">Canales de Voz</h3>
@@ -235,23 +322,78 @@ export default function MainApp() {
                       <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </button>
                   </div>
-                  {voiceChannels.map(c => (
-                    <div 
-                      key={c.id}
-                      className={`flex items-center rounded px-2 py-1.5 cursor-pointer transition mb-0.5 ${webrtc?.inVoiceChannel === c.id ? 'bg-[#35373c] text-green-400 font-bold' : 'text-[#80848e] hover:text-[#dbdee1] hover:bg-[#35373c]'}`}
-                      onClick={() => {
-                        if (webrtc?.inVoiceChannel === c.id) {
-                          webrtc.leaveVoiceChannel();
-                        } else {
-                          if (webrtc?.inVoiceChannel) webrtc.leaveVoiceChannel();
-                          webrtc.joinVoiceChannel(c.id); 
-                        }
-                      }}
-                    >
-                      <span className="mr-2">🔊</span> {c.name}
-                      {webrtc?.inVoiceChannel === c.id && <span className="ml-auto text-xs bg-green-500 text-white px-1.5 rounded-full">En llamada</span>}
-                    </div>
-                  ))}
+                  {voiceChannels.map(c => {
+                    const participants = voiceChannelUsers[c.id] || [];
+                    const isInThisChannel = webrtc?.inVoiceChannel === c.id;
+
+                    return (
+                      <div key={c.id} className="mb-1">
+                        {/* Fila del canal */}
+                        <div
+                          className={`flex items-center rounded px-2 py-1.5 cursor-pointer transition group/ch ${isInThisChannel ? 'bg-[#35373c] text-green-400 font-bold' : 'text-[#80848e] hover:text-[#dbdee1] hover:bg-[#35373c]'}`}
+                          onClick={() => {
+                            if (isInThisChannel) {
+                              setShowVoicePanel(true);
+                            } else {
+                              if (webrtc?.inVoiceChannel) webrtc.leaveVoiceChannel();
+                              webrtc.joinVoiceChannel(c.id);
+                              setShowVoicePanel(true);
+                            }
+                          }}
+                        >
+                          <span className="mr-2 text-base">🔊</span>
+                          <span className="flex-1 truncate text-sm">{c.name}</span>
+                          {participants.length > 0 && (
+                            <span className="text-xs text-[#80848e] mr-1">{participants.length}</span>
+                          )}
+                          <button
+                            onClick={(e) => deleteChannel(e, c.id)}
+                            className="opacity-0 group-hover/ch:opacity-100 text-[#80848e] hover:text-red-400 transition p-0.5 rounded shrink-0"
+                            title="Borrar canal"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                          </button>
+                        </div>
+
+                        {/* Lista de participantes dentro del canal */}
+                        {participants.length > 0 && (
+                          <div className="ml-4 mt-0.5 space-y-0.5">
+                            {participants.map(p => (
+                              <div
+                                key={p.userId}
+                                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-[#35373c] transition cursor-default"
+                              >
+                                {/* Avatar */}
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${p.userId === user?.id ? 'bg-[#5865f2]' : 'bg-[#4e5058]'}`}>
+                                  {p.username?.[0]?.toUpperCase()}
+                                </div>
+                                {/* Nombre */}
+                                <span className={`text-xs truncate flex-1 ${p.userId === user?.id ? 'text-green-400' : 'text-[#b5bac1]'}`}>
+                                  {p.username}{p.userId === user?.id ? ' (Tú)' : ''}
+                                </span>
+                                {/* Iconos de estado */}
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  {p.isDeafened ? (
+                                    <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Ensordecido">
+                                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                                    </svg>
+                                  ) : p.isMuted ? (
+                                    <svg className="text-red-400" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Silenciado">
+                                      <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+                                    </svg>
+                                  ) : (
+                                    <svg className="text-[#80848e]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" title="Micrófono activo">
+                                      <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                                    </svg>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -264,17 +406,43 @@ export default function MainApp() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-white truncate">{user?.username}</div>
                   <div className="text-xs text-[#b5bac1] truncate flex items-center">
-                    <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5"></span>Online
+                    {webrtc?.inVoiceChannel ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 shrink-0"></span>
+                        <span>En llamada</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 shrink-0"></span>
+                        <span>Online</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 
                 {webrtc?.inVoiceChannel && (
-                  <div className="flex mr-2">
-                    <button onClick={webrtc.toggleMute} className={`p-1.5 mr-1 rounded hover:bg-[#35373c] ${webrtc.isMuted ? 'text-red-500' : 'text-[#b5bac1]'}`}>
-                      {webrtc.isMuted ? '🔇' : '🎙️'}
+                  <div className="flex mr-1">
+                    <button
+                      onClick={webrtc.toggleMute}
+                      title={webrtc.isMuted ? 'Activar micrófono' : 'Silenciar micrófono'}
+                      className={`p-1.5 mr-0.5 rounded hover:bg-[#35373c] transition ${webrtc.isMuted ? 'text-red-400' : 'text-[#b5bac1]'}`}
+                    >
+                      {webrtc.isMuted ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+                      )}
                     </button>
-                    <button onClick={webrtc.toggleDeafen} className={`p-1.5 rounded hover:bg-[#35373c] ${webrtc.isDeafened ? 'text-red-500' : 'text-[#b5bac1]'}`}>
-                      {webrtc.isDeafened ? '🔕' : '🎧'}
+                    <button
+                      onClick={webrtc.toggleDeafen}
+                      title={webrtc.isDeafened ? 'Dejar de ensordecerse' : 'Ensordecerse'}
+                      className={`p-1.5 rounded hover:bg-[#35373c] transition ${webrtc.isDeafened ? 'text-red-400' : 'text-[#b5bac1]'}`}
+                    >
+                      {webrtc.isDeafened ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                      )}
                     </button>
                   </div>
                 )}
@@ -287,12 +455,41 @@ export default function MainApp() {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col bg-[#313338] min-w-0">
-              {webrtc?.inVoiceChannel ? (
-                <VoicePanel webrtc={webrtc} onlineUsers={onlineUsers} user={user} channelName={channels.find(c => c.id === webrtc.inVoiceChannel)?.name} />
+              {webrtc?.inVoiceChannel && showVoicePanel ? (
+                // Voice Panel con botón para volver al texto
+                <div className="flex-1 flex flex-col min-h-0">
+                  <VoicePanel
+                    webrtc={webrtc}
+                    onlineUsers={onlineUsers}
+                    user={user}
+                    channelName={channels.find(c => c.id === webrtc.inVoiceChannel)?.name}
+                  />
+                  {/* Barra inferior para volver al texto */}
+                  {currentChannel && (
+                    <div className="shrink-0 bg-[#232428] border-t border-[#1e1f22] px-4 py-2 flex items-center gap-3">
+                      <span className="text-[#80848e] text-sm">También estás en</span>
+                      <button
+                        onClick={() => setShowVoicePanel(false)}
+                        className="flex items-center gap-2 text-sm text-[#00a8fc] hover:underline"
+                      >
+                        <span className="text-[#80848e]">#</span>{currentChannel.name}
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : currentChannel ? (
                 <>
+                  {/* Header del canal de texto - con indicador de voz activa */}
                   <div className="h-12 border-b border-[#2b2d31] flex items-center px-4 font-semibold text-white shadow-sm shrink-0">
                     <span className="text-[#80848e] text-2xl mr-2">#</span> {currentChannel.name}
+                    {webrtc?.inVoiceChannel && (
+                      <button
+                        onClick={() => setShowVoicePanel(true)}
+                        className="ml-auto text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full font-semibold flex items-center gap-1.5 transition"
+                      >
+                        <span>🔊</span> Volver a Voz
+                      </button>
+                    )}
                   </div>
                   
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
@@ -342,20 +539,20 @@ export default function MainApp() {
               )}
             </div>
 
-            {/* Right Sidebar */}
-            {!webrtc?.inVoiceChannel && (
+            {/* Right Sidebar - Usuarios conectados */}
+            {!(webrtc?.inVoiceChannel && showVoicePanel) && (
               <div className="w-60 bg-[#2b2d31] hidden lg:block overflow-y-auto shrink-0 border-l border-[#1e1f22]">
                 <h3 className="text-xs font-semibold text-[#80848e] uppercase tracking-wider p-4 pb-2">
                   Conectados — {Object.values(onlineUsers).filter(u => u.online).length}
                 </h3>
                 <div className="px-2 space-y-1">
-                  {Object.values(onlineUsers).filter(u => u.online).map((u) => (
+                  {Object.values(onlineUsers).filter(u => u.online && u.username).map((u) => (
                     <div key={u.userId} className="flex items-center px-2 py-1.5 hover:bg-[#35373c] rounded cursor-pointer transition">
-                      <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-3 flex items-center justify-center text-white font-bold">
+                      <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-3 flex items-center justify-center text-white font-bold text-sm shrink-0">
                         {u.username?.[0]?.toUpperCase()}
-                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-[#2b2d31]"></div>
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-[#2b2d31]"></div>
                       </div>
-                      <span className="text-[#dbdee1] text-base truncate">{u.username}</span>
+                      <span className="text-[#dbdee1] text-sm truncate">{u.username}</span>
                     </div>
                   ))}
                 </div>

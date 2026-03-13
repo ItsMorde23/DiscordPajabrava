@@ -10,6 +10,66 @@ export const WebRTCProvider = ({ children, socket, user }) => {
   
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
+
+  // ── Feedback de audio con Web Audio API ───────────────────
+  const playSound = (type) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+
+      if (type === 'mute') {
+        // Tono descendente corto (indicar que te silenciaste)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.15);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+      } else if (type === 'unmute') {
+        // Tono ascendente (indicar que te desmuteaste)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+      } else if (type === 'deafen') {
+        // Doble beep descendente (ensordecido)
+        [0, 0.15].forEach(offset => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(660, now + offset);
+          osc.frequency.exponentialRampToValueAtTime(330, now + offset + 0.1);
+          gain.gain.setValueAtTime(0.25, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+          osc.start(now + offset); osc.stop(now + offset + 0.12);
+        });
+      } else if (type === 'undeafen') {
+        // Doble beep ascendente (dejar de ensordecerse)
+        [0, 0.15].forEach(offset => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(330, now + offset);
+          osc.frequency.exponentialRampToValueAtTime(660, now + offset + 0.1);
+          gain.gain.setValueAtTime(0.25, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+          osc.start(now + offset); osc.stop(now + offset + 0.12);
+        });
+      }
+    } catch (e) {
+      // Web Audio no disponible, ignorar
+    }
+  };
   
   const peerConnections = useRef({});
   const localStreamRef = useRef(null);
@@ -197,19 +257,46 @@ export const WebRTCProvider = ({ children, socket, user }) => {
   };
 
   const toggleMute = () => {
+    const newMuted = !isMuted;
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
-    } else {
-       setIsMuted(!isMuted); // toggle state even before joining
+      if (audioTrack) audioTrack.enabled = !newMuted;
+    }
+    setIsMuted(newMuted);
+    playSound(newMuted ? 'mute' : 'unmute');
+
+    // Emitir estado al servidor para que todos lo vean
+    if (socket && inVoiceChannel) {
+      socket.emit('voice_state_update', {
+        channelId: inVoiceChannel,
+        isMuted: newMuted,
+        isDeafened
+      });
     }
   };
 
   const toggleDeafen = () => {
-    setIsDeafened(!isDeafened);
+    const newDeafened = !isDeafened;
+    setIsDeafened(newDeafened);
+    playSound(newDeafened ? 'deafen' : 'undeafen');
+
+    // Si te ensordeces, también mutearte el micro localmente
+    if (newDeafened && !isMuted && localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) audioTrack.enabled = false;
+    } else if (!newDeafened && !isMuted && localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) audioTrack.enabled = true;
+    }
+
+    // Emitir estado al servidor
+    if (socket && inVoiceChannel) {
+      socket.emit('voice_state_update', {
+        channelId: inVoiceChannel,
+        isMuted: newDeafened ? true : isMuted,
+        isDeafened: newDeafened
+      });
+    }
   };
 
   const shareScreen = async () => {

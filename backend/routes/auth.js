@@ -87,4 +87,48 @@ export const verifyToken = (req, res, next) => {
   }
 };
 
+// Resetear contraseña
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { username, newPassword } = req.body;
+    if (!username || !newPassword) {
+      return res.status(400).json({ error: 'Usuario y nueva contraseña son requeridos' });
+    }
+    if (newPassword.length < 4) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await prisma.user.update({
+      where: { username },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ success: true, message: 'Contraseña actualizada con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Obtener usuarios online
+router.get('/online-users', verifyToken, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { online: true },
+      select: { id: true, username: true, online: true }
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 export default router;

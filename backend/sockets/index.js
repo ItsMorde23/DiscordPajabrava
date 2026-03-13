@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
+// Mapa en memoria: { channelId: [ { userId, username, socketId, isMuted, isDeafened } ] }
+const voiceParticipants = {};
+
 export function setupSockets(io) {
   // Middleware de autenticación para socket.io
   io.use((socket, next) => {
@@ -34,6 +37,10 @@ export function setupSockets(io) {
       online: true
     });
 
+    // Enviar al nuevo cliente el estado actual de TODOS los canales de voz
+    // para que vea quién está conectado antes de unirse a ninguno
+    socket.emit('voice_initial_state', voiceParticipants);
+
     socket.on('disconnect', async () => {
       console.log(`User disconnected: ${socket.user.username} (${socket.id})`);
       
@@ -46,11 +53,30 @@ export function setupSockets(io) {
         userId: socket.user.id,
         online: false
       });
+
+      // Limpiar de cualquier canal de voz si se desconecta abruptamente
+      Object.keys(voiceParticipants).forEach(channelId => {
+        const before = voiceParticipants[channelId]?.length || 0;
+        voiceParticipants[channelId] = (voiceParticipants[channelId] || []).filter(
+          p => p.socketId !== socket.id
+        );
+        if (voiceParticipants[channelId].length !== before) {
+          io.emit('voice_participants_update', {
+            channelId: parseInt(channelId),
+            participants: voiceParticipants[channelId]
+          });
+          io.to(`voice_${channelId}`).emit('user_left_voice', {
+            userId: socket.user.id,
+            username: socket.user.username,
+            socketId: socket.id
+          });
+          socket.leave(`voice_${channelId}`);
+        }
+      });
     });
 
     // --- TEXT CHANNELS ---
     socket.on('join_text_channel', (channelId) => {
-      // Salir de salas de texto anteriores (opcional pero limpio)
       const rooms = Array.from(socket.rooms);
       rooms.forEach(room => {
         if (room.startsWith('text_')) socket.leave(room);
@@ -77,21 +103,73 @@ export function setupSockets(io) {
     // --- WEBRTC SIGNALING ---
     // Unirse a un canal de voz
     socket.on('join_voice', (channelId) => {
+      if (!voiceParticipants[channelId]) voiceParticipants[channelId] = [];
+
+      // Evitar duplicado si ya está
+      const alreadyIn = voiceParticipants[channelId].some(p => p.userId === socket.user.id);
+      if (!alreadyIn) {
+        voiceParticipants[channelId].push({
+          userId: socket.user.id,
+          username: socket.user.username,
+          socketId: socket.id,
+          isMuted: false,
+          isDeafened: false
+        });
+      }
+
       socket.join(`voice_${channelId}`);
-      // Notificar a los otros en el canal que alguien entró para que inicien la llamada P2P
+
+      // Notificar a los otros en el canal que alguien entró (para WebRTC)
       socket.to(`voice_${channelId}`).emit('user_joined_voice', {
         userId: socket.user.id,
         username: socket.user.username,
         socketId: socket.id
+      });
+
+      // Enviar a todos la lista actualizada de participantes
+      io.emit('voice_participants_update', {
+        channelId: parseInt(channelId),
+        participants: voiceParticipants[channelId]
       });
     });
 
     // Salir de un canal de voz
     socket.on('leave_voice', (channelId) => {
       socket.leave(`voice_${channelId}`);
+
+      if (voiceParticipants[channelId]) {
+        voiceParticipants[channelId] = voiceParticipants[channelId].filter(
+          p => p.socketId !== socket.id
+        );
+      }
+
       socket.to(`voice_${channelId}`).emit('user_left_voice', {
         userId: socket.user.id,
+        username: socket.user.username,
         socketId: socket.id
+      });
+
+      // Enviar a todos la lista actualizada de participantes
+      io.emit('voice_participants_update', {
+        channelId: parseInt(channelId),
+        participants: voiceParticipants[channelId] || []
+      });
+    });
+
+    // Actualizar estado de mute/deafen de un participante
+    socket.on('voice_state_update', ({ channelId, isMuted, isDeafened }) => {
+      if (voiceParticipants[channelId]) {
+        const participant = voiceParticipants[channelId].find(p => p.userId === socket.user.id);
+        if (participant) {
+          participant.isMuted = isMuted;
+          participant.isDeafened = isDeafened;
+        }
+      }
+
+      // Emitir lista actualizada a todos
+      io.emit('voice_participants_update', {
+        channelId: parseInt(channelId),
+        participants: voiceParticipants[channelId] || []
       });
     });
 
