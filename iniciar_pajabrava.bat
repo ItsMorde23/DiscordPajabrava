@@ -13,13 +13,13 @@ start cmd /k "cd backend && npm run dev"
 
 :: Iniciar Frontend en otra ventana de comandos
 echo Iniciando Frontend (React/Vite)...
-start cmd /k "cd frontend && npm run dev"
+start cmd /k "cd frontend && npm run dev -- --host"
 
 echo.
 echo =======================================================
 echo Todo se esta iniciando en ventanas separadas.
 echo Backend  -> http://localhost:3001
-echo Frontend -> http://localhost:5173 (Abre esto en tu navegador)
+echo Frontend -> http://192.168.1.34:5173 (Abre esto en tu navegador)
 echo =======================================================
 echo.
 pause
