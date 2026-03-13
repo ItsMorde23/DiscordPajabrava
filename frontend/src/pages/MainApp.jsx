@@ -259,10 +259,10 @@ export default function MainApp() {
     e.preventDefault();
     if (!newNameInput.trim()) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/username`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/displayname`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ newUsername: newNameInput })
+        body: JSON.stringify({ displayName: newNameInput })
       });
       if (res.ok) {
         const data = await res.json();
@@ -370,8 +370,9 @@ export default function MainApp() {
             {showChangeName && (
               <div className="absolute inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={e => { if(e.target === e.currentTarget) setShowChangeName(false); }}>
                 <div className="bg-[#2b2d31] p-6 rounded-xl shadow-2xl w-80">
-                  <h2 className="text-lg font-bold text-white mb-1">Cambiar nombre</h2>
-                  <p className="text-xs text-[#80848e] mb-4">El cambio será visible para todos en el servidor.</p>
+                  <h2 className="text-lg font-bold text-white mb-1">Cambiar nombre visual</h2>
+                  <p className="text-xs text-[#80848e] mb-1">Tu nombre de usuario para iniciar sesión permanece: <span className="text-[#dbdee1] font-mono">{user?.username}</span></p>
+                  <p className="text-xs text-[#80848e] mb-4">El nombre visual es lo que los demás verán en el chat.</p>
                   <form onSubmit={submitChangeName}>
                     <input
                       autoFocus
@@ -379,7 +380,7 @@ export default function MainApp() {
                       className="w-full bg-[#1e1f22] p-2.5 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#5865f2] mb-4 text-sm"
                       value={newNameInput}
                       onChange={e => setNewNameInput(e.target.value)}
-                      placeholder="Tu nuevo nombre"
+                      placeholder="Nombre que verán los demás"
                       maxLength={32}
                     />
                     <div className="flex justify-end gap-2">
@@ -626,11 +627,11 @@ export default function MainApp() {
                     {showUserMenu && (
                      <div className="absolute bottom-full left-2 mb-2 w-56 bg-[#111214] rounded-lg shadow-xl border border-[#1e1f22] p-1.5 z-50">
                        <div className="px-2 pt-1 pb-2 border-b border-[#2b2d31] mb-1">
-                         <div className="text-xs text-[#80848e] font-semibold uppercase tracking-wider">{user?.username}</div>
-                         <div className="text-[10px] text-[#4e5058] mt-0.5">Online</div>
+                         <div className="text-xs text-[#80848e] font-semibold uppercase tracking-wider">{user?.displayName || user?.username}</div>
+                         <div className="text-[10px] text-[#4e5058] mt-0.5">@{user?.username}</div>
                        </div>
                        <div
-                         onClick={() => { setNewNameInput(user?.username || ''); setShowChangeName(true); setShowUserMenu(false); }}
+                         onClick={() => { setNewNameInput(user?.displayName || ''); setShowChangeName(true); setShowUserMenu(false); }}
                          className="px-2 py-1.5 mb-0.5 flex items-center gap-2 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white rounded cursor-pointer transition"
                        >
                          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -726,7 +727,7 @@ export default function MainApp() {
                       return (
                         <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition group/msg relative">
                           <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold mt-1">
-                            {msg.user?.username?.[0]?.toUpperCase() || '?'}
+                            {(msg.user?.displayName || msg.user?.username)?.[0]?.toUpperCase() || '?'}
                           </div>
                           <div className="flex-1 min-w-0 pr-10">
                             <div className="flex items-baseline gap-2">

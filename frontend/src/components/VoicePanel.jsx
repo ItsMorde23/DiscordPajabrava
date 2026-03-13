@@ -148,71 +148,13 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
 export default function VoicePanel({ webrtc, user, channelName, participants }) {
   return (
     <div className="flex-1 flex flex-col bg-[#111214] overflow-hidden min-h-0">
-      {/* Header */}
-      <div className="shrink-0 px-5 py-3 flex items-center justify-between border-b border-[#1e1f22] bg-[#111214]">
-        <div>
-          <h2 className="text-white font-bold text-lg flex items-center gap-2">
-            <span className="text-[#80848e]">🔊</span>
-            {channelName || 'Canal de Voz'}
-          </h2>
-          <p className="text-[#6d6f78] text-xs mt-0.5">P2P WebRTC · {Object.keys(webrtc.remoteStreams).length + 1} participante(s)</p>
-        </div>
-
-        {/* Controles de voz: estilo Discord compacto */}
-        <div className="flex items-center gap-1">
-          {/* Mute */}
-          <button
-            onClick={webrtc.toggleMute}
-            title={webrtc.isMuted ? 'Activar micrófono' : 'Silenciar'}
-            className={`w-9 h-9 flex items-center justify-center rounded-lg transition relative group/btn
-              ${webrtc.isMuted ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c]'}`}
-          >
-            {webrtc.isMuted ? <MicOffIcon /> : <MicIcon />}
-            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
-              {webrtc.isMuted ? 'Activar micro' : 'Silenciar'}
-            </div>
-          </button>
-
-          {/* Deafen */}
-          <button
-            onClick={webrtc.toggleDeafen}
-            title={webrtc.isDeafened ? 'Dejar de ensordecer' : 'Ensordecer'}
-            className={`w-9 h-9 flex items-center justify-center rounded-lg transition relative group/btn
-              ${webrtc.isDeafened ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c]'}`}
-          >
-            {webrtc.isDeafened ? <DeafenOffIcon /> : <DeafenOnIcon />}
-            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
-              {webrtc.isDeafened ? 'Dejar de ensordecer' : 'Ensordecer'}
-            </div>
-          </button>
-
-          {/* Screen Share */}
-          <button
-            onClick={webrtc.shareScreen}
-            title={webrtc.screenStream ? 'Dejar de compartir' : 'Compartir pantalla'}
-            className={`w-9 h-9 flex items-center justify-center rounded-lg transition relative group/btn
-              ${webrtc.screenStream ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-[#2b2d31] text-[#dbdee1] hover:bg-[#35373c]'}`}
-          >
-            <ScreenIcon />
-            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
-              {webrtc.screenStream ? 'Dejar de compartir' : 'Pantalla'}
-            </div>
-          </button>
-
-          <div className="w-px h-6 bg-[#2b2d31] mx-1"></div>
-
-          {/* Disconnect */}
-          <button
-            onClick={webrtc.leaveVoiceChannel}
-            title="Desconectar"
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/80 hover:text-white transition relative group/btn"
-          >
-            <PhoneOffIcon />
-            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
-              Desconectar
-            </div>
-          </button>
-        </div>
+      {/* Header — solo info del canal */}
+      <div className="shrink-0 px-5 py-3 flex items-center border-b border-[#1e1f22] bg-[#111214]">
+        <h2 className="text-white font-bold text-lg flex items-center gap-2">
+          <span className="text-[#80848e]">🔊</span>
+          {channelName || 'Canal de Voz'}
+        </h2>
+        <span className="ml-3 text-[#6d6f78] text-xs">{Object.keys(webrtc.remoteStreams).length + 1} participante(s)</span>
       </div>
 
       {/* Grid de participantes */}
@@ -244,6 +186,75 @@ export default function VoicePanel({ webrtc, user, channelName, participants }) 
             />
           );
         })}
+      </div>
+
+      {/* Barra de controles centrada en el fondo — estilo Discord */}
+      <div className="shrink-0 flex items-center justify-center gap-2 py-4 px-6 bg-[#111214] border-t border-[#1e1f22]">
+        {/* Mute */}
+        <button
+          onClick={webrtc.toggleMute}
+          title={webrtc.isMuted ? 'Activar micrófono' : 'Silenciar'}
+          className={`group/btn relative w-12 h-12 flex items-center justify-center rounded-full transition shadow-lg
+            ${webrtc.isMuted ? 'bg-red-600/30 text-red-400 hover:bg-red-600/50' : 'bg-[#292b2f] text-[#dbdee1] hover:bg-[#35373c]'}`}
+        >
+          {webrtc.isMuted ? <MicOffIcon /> : <MicIcon />}
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
+            {webrtc.isMuted ? 'Activar micro' : 'Silenciar'}
+          </div>
+          {webrtc.isMuted && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </div>
+          )}
+        </button>
+
+        {/* Deafen */}
+        <button
+          onClick={webrtc.toggleDeafen}
+          title={webrtc.isDeafened ? 'Dejar de ensordecer' : 'Ensordecer'}
+          className={`group/btn relative w-12 h-12 flex items-center justify-center rounded-full transition shadow-lg
+            ${webrtc.isDeafened ? 'bg-red-600/30 text-red-400 hover:bg-red-600/50' : 'bg-[#292b2f] text-[#dbdee1] hover:bg-[#35373c]'}`}
+        >
+          {webrtc.isDeafened ? <DeafenOffIcon /> : <DeafenOnIcon />}
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
+            {webrtc.isDeafened ? 'Dejar de ensordecer' : 'Ensordecer'}
+          </div>
+          {webrtc.isDeafened && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </div>
+          )}
+        </button>
+
+        {/* Screen Share */}
+        <button
+          onClick={webrtc.shareScreen}
+          title={webrtc.screenStream ? 'Dejar de compartir' : 'Compartir pantalla'}
+          className={`group/btn relative w-12 h-12 flex items-center justify-center rounded-full transition shadow-lg
+            ${webrtc.screenStream ? 'bg-green-600/30 text-green-400 hover:bg-green-600/50' : 'bg-[#292b2f] text-[#dbdee1] hover:bg-[#35373c]'}`}
+        >
+          <ScreenIcon />
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
+            {webrtc.screenStream ? 'Dejar de compartir' : 'Pantalla'}
+          </div>
+          {webrtc.screenStream && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+          )}
+        </button>
+
+        <div className="w-px h-8 bg-[#292b2f] mx-1"></div>
+
+        {/* Disconnect — rojo más grande */}
+        <button
+          onClick={webrtc.leaveVoiceChannel}
+          title="Desconectar"
+          className="group/btn relative w-12 h-12 flex items-center justify-center rounded-full bg-red-600 hover:bg-red-700 text-white transition shadow-lg"
+        >
+          <PhoneOffIcon />
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap z-30 transition">
+            Desconectar
+          </div>
+        </button>
       </div>
     </div>
   );

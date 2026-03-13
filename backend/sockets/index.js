@@ -15,14 +15,13 @@ export function setupSockets(io) {
     }
     jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
       if (err) return next(new Error("Authentication error"));
-      socket.user = decoded;
-      
-      // Marcar usuario como online en DB
-      await prisma.user.update({
+      // Fetch displayName from DB (not in JWT)
+      const dbUser = await prisma.user.update({
         where: { id: decoded.id },
-        data: { online: true }
+        data: { online: true },
+        select: { id: true, username: true, displayName: true }
       });
-      
+      socket.user = { ...decoded, displayName: dbUser.displayName };
       next();
     });
   });
@@ -34,6 +33,7 @@ export function setupSockets(io) {
     io.emit('user_status_change', {
       userId: socket.user.id,
       username: socket.user.username,
+      displayName: socket.user.displayName || null,
       online: true
     });
 
@@ -92,7 +92,7 @@ export function setupSockets(io) {
         const { channelId, content } = data;
         const newMessage = await prisma.message.create({
           data: { content, userId: socket.user.id, channelId },
-          include: { user: { select: { id: true, username: true } } }
+          include: { user: { select: { id: true, username: true, displayName: true } } }
         });
         io.to(`text_${channelId}`).emit('receive_message', newMessage);
       } catch (err) {
@@ -109,7 +109,7 @@ export function setupSockets(io) {
         const updatedMessage = await prisma.message.update({
           where: { id },
           data: { content },
-          include: { user: { select: { id: true, username: true } } }
+          include: { user: { select: { id: true, username: true, displayName: true } } }
         });
         io.to(`text_${channelId}`).emit('message_edited', updatedMessage);
       } catch (err) {
@@ -128,6 +128,7 @@ export function setupSockets(io) {
         voiceParticipants[channelId].push({
           userId: socket.user.id,
           username: socket.user.username,
+          displayName: socket.user.displayName || null,
           socketId: socket.id,
           isMuted: false,
           isDeafened: false,

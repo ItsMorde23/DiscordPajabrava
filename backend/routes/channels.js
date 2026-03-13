@@ -74,10 +74,10 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
     const messages = await prisma.message.findMany({
       where: { channelId },
       include: {
-        user: { select: { id: true, username: true } }
+        user: { select: { id: true, username: true, displayName: true } }
       },
       orderBy: { createdAt: 'asc' },
-      take: 50 // Last 50 messages
+      take: 50
     });
 
     res.json(messages);

@@ -35,7 +35,7 @@ router.post('/register', async (req, res) => {
 
     const token = jwt.sign({ id: newUser.id, username: newUser.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.status(201).json({ token, user: { id: newUser.id, username: newUser.username } });
+    res.status(201).json({ token, user: { id: newUser.id, username: newUser.username, displayName: newUser.displayName } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -66,7 +66,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ token, user: { id: user.id, username: user.username } });
+    res.json({ token, user: { id: user.id, username: user.username, displayName: user.displayName } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -118,30 +118,23 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// Cambiar nombre de usuario
-router.put('/username', verifyToken, async (req, res) => {
+// Cambiar nombre visual (displayName)
+router.put('/displayname', verifyToken, async (req, res) => {
   try {
-    const { newUsername } = req.body;
-    if (!newUsername || newUsername.trim() === '') {
-      return res.status(400).json({ error: 'El nuevo nombre no puede estar vacío' });
-    }
-
-    const existingUser = await prisma.user.findUnique({
-      where: { username: newUsername }
-    });
-
-    if (existingUser && existingUser.id !== req.user.id) {
-      return res.status(400).json({ error: 'El nombre de usuario ya está en uso' });
+    const { displayName } = req.body;
+    if (!displayName || displayName.trim() === '') {
+      return res.status(400).json({ error: 'El nombre no puede estar vacío' });
     }
 
     const user = await prisma.user.update({
       where: { id: req.user.id },
-      data: { username: newUsername }
+      data: { displayName: displayName.trim() }
     });
 
+    // El token no cambia porque el username (login) no cambia
     const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ token, user: { id: user.id, username: user.username } });
+    res.json({ token, user: { id: user.id, username: user.username, displayName: user.displayName } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -153,7 +146,7 @@ router.get('/online-users', verifyToken, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       where: { online: true },
-      select: { id: true, username: true, online: true }
+      select: { id: true, username: true, displayName: true, online: true }
     });
     res.json(users);
   } catch (err) {
