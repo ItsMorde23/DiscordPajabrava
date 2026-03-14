@@ -123,7 +123,11 @@ export function setupSockets(io) {
 
     // --- WEBRTC SIGNALING ---
     // Unirse a un canal de voz
-    socket.on('join_voice', (channelId) => {
+    socket.on('join_voice', (data) => {
+      const channelId = typeof data === 'object' ? data.channelId : data;
+      const initialMuted = typeof data === 'object' ? !!data.isMuted : false;
+      const initialDeafened = typeof data === 'object' ? !!data.isDeafened : false;
+
       if (!voiceParticipants[channelId]) voiceParticipants[channelId] = [];
 
       // Evitar duplicado si ya está
@@ -134,8 +138,8 @@ export function setupSockets(io) {
           username: socket.user.username,
           displayName: socket.user.displayName || null,
           socketId: socket.id,
-          isMuted: false,
-          isDeafened: false,
+          isMuted: initialMuted,
+          isDeafened: initialDeafened,
           isScreenSharing: false
         });
       }

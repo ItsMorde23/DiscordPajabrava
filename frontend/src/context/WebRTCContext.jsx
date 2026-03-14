@@ -243,7 +243,13 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       setLocalStream(stream);
       setInVoiceChannel(channelId);
-      socket.emit('join_voice', channelId);
+      
+      // Enviar estado inicial de mute/deafen
+      socket.emit('join_voice', {
+        channelId,
+        isMuted: isMuted || isDeafened,
+        isDeafened
+      });
     } catch (err) {
       console.error("Failed to access microphone", err);
       alert("No se pudo acceder al micrófono.");
@@ -276,18 +282,14 @@ export const WebRTCProvider = ({ children, socket, user }) => {
 
   const toggleMute = () => {
     const newMuted = !isMuted;
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) audioTrack.enabled = !newMuted;
-    }
     setIsMuted(newMuted);
     playSound(newMuted ? 'mute' : 'unmute');
 
-    // Emitir estado al servidor para que todos lo vean
+    // Emitir estado al servidor
     if (socket && inVoiceChannel) {
       socket.emit('voice_state_update', {
         channelId: inVoiceChannel,
-        isMuted: newMuted,
+        isMuted: newMuted || isDeafened,
         isDeafened
       });
     }
@@ -297,15 +299,6 @@ export const WebRTCProvider = ({ children, socket, user }) => {
     const newDeafened = !isDeafened;
     setIsDeafened(newDeafened);
     playSound(newDeafened ? 'deafen' : 'undeafen');
-
-    // Si te ensordeces, también mutearte el micro localmente
-    if (newDeafened && !isMuted && localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) audioTrack.enabled = false;
-    } else if (!newDeafened && !isMuted && localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) audioTrack.enabled = true;
-    }
 
     // Emitir estado al servidor
     if (socket && inVoiceChannel) {
@@ -366,10 +359,11 @@ export const WebRTCProvider = ({ children, socket, user }) => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
-         audioTrack.enabled = !isMuted;
+         // El micro se apaga si estás muteado O si estás ensordecido
+         audioTrack.enabled = !(isMuted || isDeafened);
       }
     }
-  }, [localStream, isMuted]);
+  }, [localStream, isMuted, isDeafened]);
 
   return (
     <WebRTCContext.Provider value={{
