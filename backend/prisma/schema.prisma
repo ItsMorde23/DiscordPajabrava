@@ -27,6 +27,8 @@ model Channel {
 model Message {
   id        Int      @id @default(autoincrement())
   content   String
+  fileUrl   String?
+  fileType  String?
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
   channelId Int

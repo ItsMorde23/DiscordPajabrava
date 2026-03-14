@@ -22,6 +22,12 @@ import channelsRoutes from './routes/channels.js';
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
+
+import fs from 'fs';
+if (!fs.existsSync('./uploads')) {
+  fs.mkdirSync('./uploads');
+}
 
 // Routes
 app.use('/api/auth', authRoutes);

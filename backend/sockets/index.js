@@ -93,9 +93,9 @@ export function setupSockets(io) {
     // Enviar y persistir mensaje
     socket.on('send_message', async (data) => {
       try {
-        const { channelId, content } = data;
+        const { channelId, content, fileUrl, fileType } = data;
         const newMessage = await prisma.message.create({
-          data: { content, userId: socket.user.id, channelId },
+          data: { content, userId: socket.user.id, channelId, fileUrl, fileType },
           include: { user: { select: { id: true, username: true, displayName: true } } }
         });
         io.to(`text_${channelId}`).emit('receive_message', newMessage);

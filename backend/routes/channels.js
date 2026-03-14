@@ -5,6 +5,20 @@ import { verifyToken } from './auth.js';
 const router = express.Router();
 const prisma = new PrismaClient();
 import { voiceParticipants } from '../sockets/index.js';
+import multer from 'multer';
+import path from 'path';
+
+// Configuración de Multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 // Obtener todos los canales
 router.get('/', verifyToken, async (req, res) => {
@@ -76,6 +90,17 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
       include: {
         user: { select: { id: true, username: true, displayName: true } }
       },
+      select: {
+        id: true,
+        content: true,
+        fileUrl: true,
+        fileType: true,
+        userId: true,
+        channelId: true,
+        createdAt: true,
+        updatedAt: true,
+        user: true
+      },
       orderBy: { createdAt: 'asc' },
       take: 50
     });
@@ -140,6 +165,18 @@ router.delete('/:channelId', verifyToken, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
+});
+
+// Ruta para cargar archivos
+router.post('/upload', verifyToken, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se cargó ningún archivo' });
+  
+  const fileUrl = `/uploads/${req.file.filename}`;
+  res.json({ 
+    fileUrl, 
+    fileType: req.file.mimetype,
+    fileName: req.file.originalname
+  });
 });
 
 export default router;
