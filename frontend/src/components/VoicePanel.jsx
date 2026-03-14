@@ -34,33 +34,9 @@ const PhoneOffIcon = () => (
 );
 
 // Card de participante
-const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened, isScreenSharing, localDeafened }) => {
-  const [volume, setVolume] = useState(1);
+const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened, isScreenSharing, localDeafened, volume, onVolumeChange }) => {
   const [isHidden, setHidden] = useState(false);
   const videoRef = useRef(null);
-
-  // Aplicar volumen al element de audio oculto
-  useEffect(() => {
-    const audioEl = document.getElementById(`peer-audio-${peerId}`);
-    if (audioEl) {
-      if (localDeafened || isMuted || (isLocal && isDeafened)) {
-        audioEl.volume = 0;
-      } else {
-        audioEl.volume = Math.min(1, Math.max(0, volume));
-      }
-    }
-  }, [volume, peerId, localDeafened, isMuted, isLocal, isDeafened]);
-
-  // Aplicar volumen también al video (para screen share con audio)
-  useEffect(() => {
-    if (videoRef.current) {
-      if (localDeafened || (isLocal && isDeafened)) {
-        videoRef.current.volume = 0;
-      } else {
-        videoRef.current.volume = Math.min(1, Math.max(0, volume));
-      }
-    }
-  }, [volume, localDeafened, isLocal, isDeafened]);
 
   const hasVideoTrack = streamData?.stream?.getVideoTracks().length > 0;
   const hasVideo = hasVideoTrack && !isHidden;
@@ -82,34 +58,22 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
       {hasVideo ? (
         <video
           autoPlay
-          muted={isLocal}
+          muted={isLocal || localDeafened}
           ref={el => {
             videoRef.current = el;
             if (el && el.srcObject !== streamData.stream) el.srcObject = streamData.stream;
+            if (el) el.volume = localDeafened ? 0 : (volume ?? 1);
           }}
           className="w-full h-full object-contain bg-black absolute inset-0"
         />
       ) : (
-        <>
-          <div className="w-full h-full flex flex-col items-center justify-center absolute inset-0 bg-gradient-to-b from-[#1e1f22] to-[#111214]">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg
-              ${isLocal && isMuted ? 'bg-red-600' : 'bg-[#5865f2]'}
-            `}>
-              {username?.[0]?.toUpperCase()}
-            </div>
+        <div className="w-full h-full flex flex-col items-center justify-center absolute inset-0 bg-gradient-to-b from-[#1e1f22] to-[#111214]">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg
+            ${isLocal && isMuted ? 'bg-red-600' : 'bg-[#5865f2]'}
+          `}>
+            {username?.[0]?.toUpperCase()}
           </div>
-          {/* CRITICAL: Render an audio element to play the voice for remote users! */}
-          {!isLocal && streamData?.stream && (
-            <audio
-              id={`peer-audio-${peerId}`}
-              autoPlay
-              ref={el => {
-                if (el && el.srcObject !== streamData.stream) el.srcObject = streamData.stream;
-              }}
-              style={{ display: 'none' }}
-            />
-          )}
-        </>
+        </div>
       )}
 
       {/* Overlay: Nombre + iconos */}
@@ -137,17 +101,17 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
       {/* Control de volumen remoto */}
       {!isLocal && (
         <div className="absolute top-2 right-2 bg-black/70 p-2 rounded-lg flex flex-col items-center opacity-60 hover:opacity-100 transition duration-200 z-20 backdrop-blur-sm gap-1.5 shadow-md">
-          <span className="text-[10px] text-[#b5bac1] font-bold">{Math.round(Math.min(volume, 1) * 100)}%</span>
+          <span className="text-[10px] text-[#b5bac1] font-bold">{Math.round((volume ?? 1) * 100)}%</span>
           <input
             type="range"
             min="0" max="1" step="0.02"
-            value={Math.min(volume, 1)}
-            onChange={e => setVolume(parseFloat(e.target.value))}
+            value={volume ?? 1}
+            onChange={e => onVolumeChange(parseFloat(e.target.value))}
             className="w-16 accent-[#5865f2]"
             style={{ writingMode: 'horizontal-tb' }}
           />
           <button
-            onClick={() => setVolume(v => v > 0 ? 0 : 1)}
+            onClick={() => onVolumeChange(volume > 0 ? 0 : 1)}
             className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition ${volume === 0 ? 'bg-red-500 text-white' : 'bg-[#35373c] text-[#b5bac1] hover:bg-[#404249]'}`}
           >
             {volume === 0 ? 'Silenciado' : 'Vol'}
@@ -209,6 +173,8 @@ export default function VoicePanel({ webrtc, user, channelName, participants }) 
               isDeafened={p.isDeafened || false}
               isScreenSharing={p.isScreenSharing || false}
               localDeafened={webrtc.isDeafened}
+              volume={webrtc.peerVolumes[peerId] ?? 1}
+              onVolumeChange={(vol) => webrtc.setPeerVolume(peerId, vol)}
             />
           );
         })}

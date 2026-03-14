@@ -10,6 +10,7 @@ export const WebRTCProvider = ({ children, socket, user }) => {
   
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
+  const [peerVolumes, setPeerVolumes] = useState({}); // { userId: volume (0-1) }
 
   // ── Feedback de audio con Web Audio API ───────────────────
   const playSound = (type) => {
@@ -95,10 +96,17 @@ export const WebRTCProvider = ({ children, socket, user }) => {
     Object.keys(remoteStreams).forEach(id => {
       const audioEl = document.getElementById(`peer-audio-${id}`);
       if (audioEl) {
+        // El elemento HTML se mutea si el usuario está en "Deafen"
         audioEl.muted = isDeafened;
+        // El volumen viene del estado peerVolumes (default 1)
+        audioEl.volume = peerVolumes[id] ?? 1;
       }
     });
-  }, [isDeafened, remoteStreams]);
+  }, [isDeafened, remoteStreams, peerVolumes]);
+
+  const setPeerVolume = (userId, volume) => {
+    setPeerVolumes(prev => ({ ...prev, [userId]: volume }));
+  };
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -377,18 +385,20 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       leaveVoiceChannel,
       toggleMute,
       toggleDeafen,
-      shareScreen
+      shareScreen,
+      peerVolumes,
+      setPeerVolume
     }}>
       {children}
-      {/* Hidden Audio Elements for Remote Streams */}
+      {/* Hidden Audio Elements for Remote Streams - CENTRALIZED */}
       {Object.entries(remoteStreams).map(([peerId, streamData]) => (
         <audio
           key={peerId}
           id={`peer-audio-${peerId}`}
           autoPlay
+          muted={isDeafened}
           ref={el => {
             if (el && el.srcObject !== streamData.stream) {
-              // Filtrar el audio del stream principal si existe
               el.srcObject = streamData.stream;
             }
           }}
