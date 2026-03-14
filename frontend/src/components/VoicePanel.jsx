@@ -128,7 +128,7 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
 
       {/* Control de volumen remoto */}
       {!isLocal && (
-        <div className="absolute top-2 right-2 bg-black/80 p-2 rounded-lg flex flex-col items-center opacity-0 group-hover:opacity-100 transition duration-200 z-20 backdrop-blur-sm gap-1.5">
+        <div className="absolute top-2 right-2 bg-black/70 p-2 rounded-lg flex flex-col items-center opacity-60 hover:opacity-100 transition duration-200 z-20 backdrop-blur-sm gap-1.5 shadow-md">
           <span className="text-[10px] text-[#b5bac1] font-bold">{Math.round(Math.min(volume, 1) * 100)}%</span>
           <input
             type="range"
