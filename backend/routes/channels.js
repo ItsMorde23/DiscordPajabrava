@@ -87,9 +87,6 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
 
     const messages = await prisma.message.findMany({
       where: { channelId },
-      include: {
-        user: { select: { id: true, username: true, displayName: true } }
-      },
       select: {
         id: true,
         content: true,
@@ -99,7 +96,13 @@ router.get('/:channelId/messages', verifyToken, async (req, res) => {
         channelId: true,
         createdAt: true,
         updatedAt: true,
-        user: true
+        user: { 
+          select: { 
+            id: true, 
+            username: true, 
+            displayName: true 
+          } 
+        }
       },
       orderBy: { createdAt: 'asc' },
       take: 50
