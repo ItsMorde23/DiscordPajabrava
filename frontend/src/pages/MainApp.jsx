@@ -197,11 +197,15 @@ export default function MainApp() {
       const msgRes = await fetch(`${import.meta.env.VITE_API_URL}/api/channels/${channel.id}/messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!msgRes.ok) return;
+      if (!msgRes.ok) {
+        console.error(`Error fetching messages: ${msgRes.status} ${msgRes.statusText}`);
+        return;
+      }
       const msgs = await msgRes.json();
+      console.log(`Cargados ${msgs.length} mensajes para el canal ${channel.id}`);
       setMessages(Array.isArray(msgs) ? msgs : []);
     } catch (err) {
-      console.error('Error fetching messages', err);
+      console.error('Error fetching messages Exception:', err);
     }
   };
 

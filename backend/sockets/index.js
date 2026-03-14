@@ -95,12 +95,18 @@ export function setupSockets(io) {
       try {
         const { channelId, content, fileUrl, fileType } = data;
         const newMessage = await prisma.message.create({
-          data: { content, userId: socket.user.id, channelId, fileUrl, fileType },
+          data: { 
+            content, 
+            userId: socket.user.id, 
+            channelId: parseInt(channelId), 
+            fileUrl, 
+            fileType 
+          },
           include: { user: { select: { id: true, username: true, displayName: true } } }
         });
         io.to(`text_${channelId}`).emit('receive_message', newMessage);
       } catch (err) {
-        console.error('Error saving message:', err);
+        console.error('Error saving message to database:', err);
       }
     });
 
@@ -111,7 +117,7 @@ export function setupSockets(io) {
         if (!existingMessage || existingMessage.userId !== socket.user.id) return;
 
         const updatedMessage = await prisma.message.update({
-          where: { id },
+          where: { id: parseInt(id) },
           data: { content },
           include: { user: { select: { id: true, username: true, displayName: true } } }
         });
