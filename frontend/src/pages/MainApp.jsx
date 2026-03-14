@@ -115,14 +115,21 @@ export default function MainApp() {
 
     const fetchInitialData = async () => {
       try {
-        // Fetch usuarios online iniciales
-        const resUsers = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/online-users`, {
+        // Fetch todos los usuarios (online y offline)
+        const resUsers = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resUsers.ok) {
           const usersData = await resUsers.json();
           const usersMap = {};
-          usersData.forEach(u => { usersMap[u.id] = { userId: u.id, username: u.username, online: true }; });
+          usersData.forEach(u => { 
+            usersMap[u.id] = { 
+              userId: u.id, 
+              username: u.username, 
+              displayName: u.displayName, 
+              online: u.online 
+            }; 
+          });
           setOnlineUsers(usersMap);
         }
 
@@ -270,6 +277,15 @@ export default function MainApp() {
         setUser(data.user);
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Notify socket about the name change
+        if (socket) {
+          socket.emit('user_info_updated', {
+            userId: data.user.id,
+            displayName: data.user.displayName
+          });
+        }
+        
         setShowChangeName(false);
         setNewNameInput('');
       } else {
@@ -712,6 +728,9 @@ export default function MainApp() {
                     </div>
 
                     {messages.map((msg, index) => {
+                      // Check if current user is mentioned
+                      const isMentioned = msg.content.includes(`@${user?.username}`);
+                      
                       // Parse @mentions in message content
                       const renderContent = (text) => {
                         const parts = text.split(/(@\w[\w\s]*\w|@\w+)/g);
@@ -719,13 +738,13 @@ export default function MainApp() {
                           if (part.startsWith('@')) {
                             const mentioned = part.slice(1);
                             const isMentioningMe = mentioned === user?.username;
-                            return <span key={i} className={`font-semibold px-0.5 rounded ${isMentioningMe ? 'bg-yellow-400/20 text-yellow-300' : 'text-[#5865f2] hover:underline cursor-pointer'}`}>{part}</span>;
+                            return <span key={i} className={`font-semibold px-0.5 rounded ${isMentioningMe ? 'text-yellow-300' : 'text-[#5865f2] hover:underline cursor-pointer'}`}>{part}</span>;
                           }
                           return part;
                         });
                       };
                       return (
-                        <div key={msg.id || index} className="flex items-start hover:bg-[#2e3035] -mx-4 px-4 py-1.5 transition group/msg relative">
+                        <div key={msg.id || index} className={`flex items-start -mx-4 px-4 py-1.5 transition group/msg relative ${isMentioned ? 'bg-yellow-400/10 border-l-2 border-yellow-400' : 'hover:bg-[#2e3035]'}`}>
                           <div className="w-10 h-10 rounded-full bg-[#5865f2] mr-4 flex-shrink-0 flex items-center justify-center text-white font-bold mt-1">
                             {(msg.user?.displayName || msg.user?.username)?.[0]?.toUpperCase() || '?'}
                           </div>
@@ -888,13 +907,25 @@ export default function MainApp() {
                     </button>
                   </h3>
                   <div className="px-2 space-y-1">
+                    {/* Online Users */}
                     {Object.values(onlineUsers).filter(u => u.online && u.username).map((u) => (
                       <div key={u.userId} className="flex items-center px-2 py-1.5 hover:bg-[#35373c] rounded cursor-pointer transition">
                         <div className="w-8 h-8 rounded-full bg-[#5865f2] relative mr-3 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                          {u.username?.[0]?.toUpperCase()}
+                          {u.displayName?.[0]?.toUpperCase() || u.username?.[0]?.toUpperCase()}
                           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-[#2b2d31]"></div>
                         </div>
-                        <span className="text-[#dbdee1] text-sm truncate">{u.username}</span>
+                        <span className="text-[#dbdee1] text-sm truncate font-medium">{u.displayName || u.username}</span>
+                      </div>
+                    ))}
+
+                    {/* Offline Users */}
+                    <h3 className="text-xs font-semibold text-[#80848e] uppercase tracking-wider p-4 pb-1 mt-4">Desconectados — {Object.values(onlineUsers).filter(u => !u.online).length}</h3>
+                    {Object.values(onlineUsers).filter(u => !u.online && u.username).map((u) => (
+                      <div key={u.userId} className="flex items-center px-2 py-1.5 hover:bg-[#35373c] rounded cursor-pointer transition opacity-40 grayscale-[0.5]">
+                        <div className="w-8 h-8 rounded-full bg-[#4e5058] relative mr-3 flex items-center justify-center text-[#b5bac1] font-bold text-sm shrink-0">
+                          {u.displayName?.[0]?.toUpperCase() || u.username?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="text-[#949ba4] text-sm truncate">{u.displayName || u.username}</span>
                       </div>
                     ))}
                   </div>

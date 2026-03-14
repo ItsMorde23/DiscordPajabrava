@@ -201,6 +201,29 @@ export function setupSockets(io) {
       });
     });
 
+    // Actualizar información de usuario (p.ej. nombre visual)
+    socket.on('user_info_updated', ({ userId, displayName }) => {
+      // Actualizar en el mapa de voz si está conectado
+      Object.keys(voiceParticipants).forEach(chId => {
+        const p = voiceParticipants[chId].find(u => u.userId === userId);
+        if (p) {
+          p.displayName = displayName;
+          // Notificar actualización de participantes para ese canal
+          io.emit('voice_participants_update', {
+            channelId: parseInt(chId),
+            participants: voiceParticipants[chId]
+          });
+        }
+      });
+
+      // Notificar a todos el cambio de status/info
+      io.emit('user_status_change', {
+        userId,
+        displayName,
+        online: true
+      });
+    });
+
     // Intercambio de Ofertas, Respuestas y Candidatos ICE (Mesh P2P)
     socket.on('webrtc_offer', (data) => {
       io.to(data.targetSocketId).emit('webrtc_offer', {

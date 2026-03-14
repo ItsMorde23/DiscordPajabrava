@@ -141,11 +141,10 @@ router.put('/displayname', verifyToken, async (req, res) => {
   }
 });
 
-// Obtener usuarios online
-router.get('/online-users', verifyToken, async (req, res) => {
+// Obtener todos los usuarios (para la lista de miembros con online/offline)
+router.get('/users', verifyToken, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
-      where: { online: true },
       select: { id: true, username: true, displayName: true, online: true }
     });
     res.json(users);

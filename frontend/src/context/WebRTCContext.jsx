@@ -183,7 +183,7 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       socket.off('webrtc_ice_candidate', handleIceCandidate);
       socket.off('user_left_voice', handleUserLeft);
     };
-  }, [socket, user]);
+  }, [socket, user?.id]);
 
   const createPeerConnection = (socketId, peerUserId, peerUsername) => {
     const pc = new RTCPeerConnection(iceServers);
