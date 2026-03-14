@@ -170,7 +170,8 @@ export default function MainApp() {
            }
         } else {
            setChannels(validChannels);
-           const defaultText = validChannels.find(c => c.type === 'text');
+           const lastChannelId = localStorage.getItem('lastChannelId');
+           const defaultText = (lastChannelId && validChannels.find(c => String(c.id) === lastChannelId && c.type === 'text')) || validChannels.find(c => c.type === 'text');
            if (defaultText) selectTextChannel(defaultText, newSocket);
         }
       } catch (err) {
@@ -179,12 +180,15 @@ export default function MainApp() {
     };
 
     fetchInitialData();
+    const lastChannelId = localStorage.getItem('lastChannelId');
 
     return () => newSocket.close();
   }, [token]);
 
   const selectTextChannel = async (channel, activeSocket = socket) => {
+    setMessages([]); // Clear previous messages immediately
     setCurrentChannel(channel);
+    localStorage.setItem('lastChannelId', channel.id);
     setShowVoicePanel(false);
     if (activeSocket) {
       activeSocket.emit('join_text_channel', channel.id);
