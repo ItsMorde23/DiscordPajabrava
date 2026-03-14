@@ -15,14 +15,18 @@ export function setupSockets(io) {
     }
     jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
       if (err) return next(new Error("Authentication error"));
-      // Fetch displayName from DB (not in JWT)
-      const dbUser = await prisma.user.update({
-        where: { id: decoded.id },
-        data: { online: true },
-        select: { id: true, username: true, displayName: true }
-      });
-      socket.user = { ...decoded, displayName: dbUser.displayName };
-      next();
+      try {
+        const dbUser = await prisma.user.update({
+          where: { id: decoded.id },
+          data: { online: true },
+          select: { id: true, username: true, displayName: true }
+        });
+        socket.user = { ...decoded, displayName: dbUser.displayName };
+        next();
+      } catch (dbErr) {
+        console.error("Error en auth del socket (posible schema desactualizado):", dbErr.message);
+        next(new Error("Database error"));
+      }
     });
   });
 
