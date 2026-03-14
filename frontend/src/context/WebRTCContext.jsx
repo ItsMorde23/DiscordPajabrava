@@ -248,7 +248,14 @@ export const WebRTCProvider = ({ children, socket, user }) => {
 
   const joinVoiceChannel = async (channelId) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }, 
+        video: false 
+      });
       setLocalStream(stream);
       setInVoiceChannel(channelId);
       
