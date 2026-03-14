@@ -78,13 +78,26 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
           className="w-full h-full object-contain bg-black absolute inset-0"
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center absolute inset-0 bg-gradient-to-b from-[#1e1f22] to-[#111214]">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg
-            ${isLocal && isMuted ? 'bg-red-600' : 'bg-[#5865f2]'}
-          `}>
-            {username?.[0]?.toUpperCase()}
+        <>
+          <div className="w-full h-full flex flex-col items-center justify-center absolute inset-0 bg-gradient-to-b from-[#1e1f22] to-[#111214]">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg
+              ${isLocal && isMuted ? 'bg-red-600' : 'bg-[#5865f2]'}
+            `}>
+              {username?.[0]?.toUpperCase()}
+            </div>
           </div>
-        </div>
+          {/* CRITICAL: Render an audio element to play the voice for remote users! */}
+          {!isLocal && streamData?.stream && (
+            <audio
+              id={`peer-audio-${peerId}`}
+              autoPlay
+              ref={el => {
+                if (el && el.srcObject !== streamData.stream) el.srcObject = streamData.stream;
+              }}
+              style={{ display: 'none' }}
+            />
+          )}
+        </>
       )}
 
       {/* Overlay: Nombre + iconos */}
