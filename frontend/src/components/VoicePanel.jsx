@@ -34,7 +34,7 @@ const PhoneOffIcon = () => (
 );
 
 // Card de participante
-const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened, isScreenSharing }) => {
+const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened, isScreenSharing, localDeafened }) => {
   const [volume, setVolume] = useState(1);
   const [isHidden, setHidden] = useState(false);
   const videoRef = useRef(null);
@@ -43,16 +43,24 @@ const PeerVideo = ({ peerId, username, streamData, isLocal, isMuted, isDeafened,
   useEffect(() => {
     const audioEl = document.getElementById(`peer-audio-${peerId}`);
     if (audioEl) {
-      audioEl.volume = Math.min(1, Math.max(0, volume));
+      if (localDeafened || isMuted || (isLocal && isDeafened)) {
+        audioEl.volume = 0;
+      } else {
+        audioEl.volume = Math.min(1, Math.max(0, volume));
+      }
     }
-  }, [volume, peerId]);
+  }, [volume, peerId, localDeafened, isMuted, isLocal, isDeafened]);
 
   // Aplicar volumen también al video (para screen share con audio)
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.volume = Math.min(1, Math.max(0, volume));
+      if (localDeafened || (isLocal && isDeafened)) {
+        videoRef.current.volume = 0;
+      } else {
+        videoRef.current.volume = Math.min(1, Math.max(0, volume));
+      }
     }
-  }, [volume]);
+  }, [volume, localDeafened, isLocal, isDeafened]);
 
   const hasVideoTrack = streamData?.stream?.getVideoTracks().length > 0;
   const hasVideo = hasVideoTrack && !isHidden;
@@ -200,6 +208,7 @@ export default function VoicePanel({ webrtc, user, channelName, participants }) 
               isMuted={p.isMuted || false}
               isDeafened={p.isDeafened || false}
               isScreenSharing={p.isScreenSharing || false}
+              localDeafened={webrtc.isDeafened}
             />
           );
         })}
