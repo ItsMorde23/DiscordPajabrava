@@ -98,8 +98,8 @@ export const WebRTCProvider = ({ children, socket, user }) => {
       if (audioEl) {
         // El elemento HTML se mutea si el usuario está en "Deafen"
         audioEl.muted = isDeafened;
-        // El volumen viene del estado peerVolumes (default 1)
-        audioEl.volume = peerVolumes[id] ?? 1;
+        // El volumen viene del estado peerVolumes - normalizar ids para el lookup
+        audioEl.volume = peerVolumes[id] ?? peerVolumes[Number(id)] ?? 1;
       }
     });
   }, [isDeafened, remoteStreams, peerVolumes]);

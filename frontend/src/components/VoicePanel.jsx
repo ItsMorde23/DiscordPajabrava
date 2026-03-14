@@ -161,7 +161,7 @@ export default function VoicePanel({ webrtc, user, channelName, participants }) 
 
         {/* Remotos */}
         {Object.entries(webrtc.remoteStreams).map(([peerId, streamData]) => {
-          const p = participants?.find(p => p.userId === peerId) || {};
+          const p = participants?.find(p => String(p.userId) === String(peerId)) || {};
           return (
             <PeerVideo
               key={peerId}
